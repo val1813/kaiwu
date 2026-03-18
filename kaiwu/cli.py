@@ -501,8 +501,9 @@ def _find_plugin_root() -> Path | None:
 
 
 def _install_claude_code_plugin():
-    """安装 kaiwu 为 Claude Code Plugin（通过 junction 链接）"""
+    """安装 kaiwu 为 Claude Code Plugin（注册为本地 marketplace）"""
     import subprocess as sp
+    from datetime import datetime, timezone
 
     console.print("\n[bold cyan]安装 kaiwu 为 Claude Code Plugin[/bold cyan]\n")
 
@@ -516,12 +517,9 @@ def _install_claude_code_plugin():
         console.print("    kaiwu install --plugin")
         return
 
-    plugins_dir = Path.home() / ".claude" / "plugins"
-    target = plugins_dir / "kaiwu"
-
     console.print(f"  [green]OK[/green] 插件根目录: {plugin_root}")
 
-    # 2. 模板化 .mcp.json 中的 Python 路径
+    # 1. 模板化 .mcp.json 中的 Python 路径
     mcp_json_path = plugin_root / ".mcp.json"
     python_path = sys.executable.replace("\\", "/")
     mcp_config = {
@@ -540,26 +538,26 @@ def _install_claude_code_plugin():
     )
     console.print(f"  [green]OK[/green] .mcp.json 已更新 (python={python_path})")
 
-    # 3. 创建 junction 链接
-    plugins_dir.mkdir(parents=True, exist_ok=True)
+    # 2. 创建 junction 到 marketplaces/ 目录
+    marketplaces_dir = Path.home() / ".claude" / "plugins" / "marketplaces"
+    target = marketplaces_dir / "kaiwu"
+    marketplaces_dir.mkdir(parents=True, exist_ok=True)
 
     if target.exists() or target.is_symlink():
-        # Check if it already points to the right place
         try:
             if target.resolve() == plugin_root:
                 console.print(f"  [green]OK[/green] Junction 已存在且正确: {target}")
             else:
                 console.print(f"  [yellow]WARN[/yellow] Junction 存在但指向: {target.resolve()}")
-                console.print(f"  删除后重新创建...")
-                # Remove existing junction/dir
+                console.print("  删除后重新创建...")
                 if target.is_dir():
-                    sp.run(["cmd", "/c", "rmdir", str(target)], check=True)
+                    sp.run(["cmd", "/c", "rmdir", str(target)],
+                           capture_output=True, check=True)
                 else:
                     target.unlink()
-                # Create new junction
                 sp.run(
                     ["cmd", "/c", "mklink", "/J", str(target), str(plugin_root)],
-                    check=True
+                    capture_output=True, check=True
                 )
                 console.print(f"  [green]OK[/green] Junction 已重建: {target} -> {plugin_root}")
         except Exception as e:
@@ -569,15 +567,50 @@ def _install_claude_code_plugin():
         try:
             sp.run(
                 ["cmd", "/c", "mklink", "/J", str(target), str(plugin_root)],
-                check=True
+                capture_output=True, check=True
             )
             console.print(f"  [green]OK[/green] Junction 已创建: {target} -> {plugin_root}")
         except Exception as e:
             console.print(f"  [red]FAIL[/red] 创建 Junction 失败: {e}")
-            console.print("  可手动执行: mklink /J \"{target}\" \"{plugin_root}\"")
+            console.print(f"  可手动执行: mklink /J \"{target}\" \"{plugin_root}\"")
             return
 
-    # 4. 检查旧 MCP 注册并提示
+    # 3. 注册到 known_marketplaces.json
+    km_path = Path.home() / ".claude" / "plugins" / "known_marketplaces.json"
+    try:
+        if km_path.exists():
+            km_data = json.loads(km_path.read_text(encoding="utf-8"))
+        else:
+            km_data = {}
+
+        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        km_data["kaiwu"] = {
+            "source": {
+                "source": "github",
+                "repo": "val1813/kaiwu"
+            },
+            "installLocation": str(target).replace("/", "\\"),
+            "lastUpdated": now_iso
+        }
+        km_path.write_text(
+            json.dumps(km_data, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+        console.print(f"  [green]OK[/green] 已注册到 known_marketplaces.json")
+    except Exception as e:
+        console.print(f"  [yellow]WARN[/yellow] marketplace 注册失败: {e}")
+        console.print("  插件文件已就位，可能需要手动重启 Claude Code")
+
+    # 4. 清理旧的 plugins/kaiwu junction（如果存在）
+    old_target = Path.home() / ".claude" / "plugins" / "kaiwu"
+    if old_target.exists() and old_target.is_dir():
+        try:
+            sp.run(["cmd", "/c", "rmdir", str(old_target)],
+                   capture_output=True, check=False)
+        except Exception:
+            pass
+
+    # 5. 检查旧 MCP 注册并提示
     claude_settings = Path.home() / ".claude" / "settings.json"
     if claude_settings.exists():
         try:
