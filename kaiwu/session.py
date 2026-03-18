@@ -652,7 +652,7 @@ def build_session_context(session: Session, max_chars: int = 2400) -> str:
     if session.recent_turns:
         recent_lines = []
         for rt in session.recent_turns[-5:]:
-            result_text = f" → {rt.result[:60]}" if rt.result else ""
+            result_text = f" -> {rt.result[:60]}" if rt.result else ""
             recent_lines.append(f"  turn {rt.turn}: {rt.action[:80]}{result_text}")
         parts.append("[最近操作]\n" + "\n".join(recent_lines))
 

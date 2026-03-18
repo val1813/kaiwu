@@ -213,7 +213,7 @@ def session_show(session_id):
     if recent:
         console.print("\n[bold]最近操作:[/bold]")
         for rt in recent[-5:]:
-            result = f" → {rt.get('result', '')[:60]}" if rt.get("result") else ""
+            result = f" -> {rt.get('result', '')[:60]}" if rt.get("result") else ""
             console.print(f"  [dim]turn {rt.get('turn', '?')}:[/dim] {rt.get('action', '')[:80]}{result}")
 
 
@@ -329,9 +329,9 @@ def install(platform, project_dir):
                 _install_vscode(project)
             elif target == "codex":
                 _install_codex(project)
-            console.print(f"  [green]✓[/green] {target}")
+            console.print(f"  [green]OK[/green] {target}")
         except Exception as e:
-            console.print(f"  [red]✗[/red] {target}: {e}")
+            console.print(f"  [red]FAIL[/red] {target}: {e}")
 
     console.print(f"\n[bold]MCP Server 注册[/bold]")
     _register_mcp_server()
@@ -490,9 +490,9 @@ def _add_mcp_to_settings(settings_path: Path, platform: str):
         settings_path.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-        console.print(f"  [green]✓[/green] MCP Server 已注册到 {settings_path}")
+        console.print(f"  [green]OK[/green] MCP Server 已注册到 {settings_path}")
     except Exception as e:
-        console.print(f"  [yellow]⚠[/yellow] MCP 注册失败 ({platform}): {e}")
+        console.print(f"  [yellow]WARN[/yellow] MCP 注册失败 ({platform}): {e}")
 
 
 @main.command()
@@ -502,7 +502,7 @@ def toggle(action):
     """一键开关 kaiwu（在各平台 MCP 配置中启用/禁用）
 
     \b
-    kaiwu toggle        自动切换（开→关，关→开）
+    kaiwu toggle        自动切换(开/关)
     kaiwu toggle --on   强制启用
     kaiwu toggle --off  强制禁用
     """

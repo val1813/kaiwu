@@ -265,7 +265,7 @@ class Experience:
             key_steps = [s for s in self.tool_sequence if s.success][:5]
             if key_steps:
                 step_lines = [
-                    f"  {i}. {s.tool_name}({s.params_summary}) → {s.result_summary}"
+                    f"  {i}. {s.tool_name}({s.params_summary}) -> {s.result_summary}"
                     for i, s in enumerate(key_steps, 1)
                 ]
                 parts.append("[关键步骤]\n" + "\n".join(step_lines))

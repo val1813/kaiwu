@@ -141,7 +141,7 @@ def build_event_chain(events: list[dict]) -> str:
     if not events:
         return ""
     types = [e.get("event_type", "?") for e in events if e.get("event_type")]
-    return "→".join(types[:10])
+    return "->".join(types[:10])
 
 
 def get_platform() -> str:
