@@ -69,9 +69,10 @@ deepseek统领经验库、错误库还有个自作聪明的中国经验库。给
 后面会发布云端版，收集大家错误，然后共享    
 （等我的网站ICP和我个体工商户弄出来，到时候收费！！！）    
 我测过几次数据 大概水平（测试偏短，大家可以尝试，备好deepseekkey，冲5快不要多）：    
-<img width="1221" height="275" alt="image" src="https://github.com/user-attachments/assets/62986d2a-6cea-4691-830c-37bcafa79088" />
+<img width="1272" height="1396" alt="image" src="https://github.com/user-attachments/assets/85174b8a-9f17-47e8-8199-638e0d31ebd3" />
 
- 
+<img width="1376" height="388" alt="image" src="https://github.com/user-attachments/assets/6a340d12-0b81-45c4-8a60-90166e5fa68c" />
+
 
  后面会上云端，希望到时大家多共享，到时根据共享给大家算积分，共享成果，数据库拿出来贡献给国家
  迟早有一天 咱们能做到
