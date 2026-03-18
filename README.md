@@ -153,7 +153,26 @@ kaiwu config set providers.deepseek.api_key sk-your-api-key
 
 免费注册：[platform.deepseek.com](https://platform.deepseek.com)（新用户赠送 500 万 tokens）
 
-### 3. 安装到编程工具
+### 3. 安装到 Claude Code（推荐 Plugin 模式）
+
+**方式 A：Plugin 模式安装（推荐，更稳定）**
+
+```bash
+kaiwu install --plugin
+```
+
+这一步会：
+- 在 `~/.claude/plugins/kaiwu/` 创建 junction 链接到 kaiwu 仓库
+- 自动模板化 Python 路径到 `.mcp.json`
+- MCP Server 由插件内部管理，无需在 settings.json 中手动注册
+
+安装后重启 Claude Code，即可使用：
+- 6 个斜杠命令：`/kaiwu-plan`、`/kaiwu-lessons`、`/kaiwu-record`、`/kaiwu-scene`、`/kaiwu-doctor`、`/kaiwu-stats`
+- 3 个自动触发技能（工作流引导、错误诊断、经验记录）
+- 2 个事件钩子（错误检测提示、任务结束提醒）
+- 7 个 MCP 工具（通过插件内嵌 MCP Server 提供）
+
+**方式 B：传统 MCP 模式安装**
 
 ```bash
 # 安装到所有已检测到的平台
@@ -180,7 +199,7 @@ kaiwu doctor
 kaiwu doctor --fix
 ```
 
-### 5. 启动使用（推荐）
+### 5. 启动使用
 
 ```bash
 # 验证 kaiwu 接入后直接启动 Claude Code
@@ -284,7 +303,8 @@ kaiwu doctor                 # 诊断 MCP 连接状态
 kaiwu doctor --fix           # 诊断并自动修复
 kaiwu serve                  # 启动 MCP Server
 kaiwu config                 # 交互式配置向导
-kaiwu install                # 安装到编程工具
+kaiwu install --plugin       # 安装为 Claude Code Plugin（推荐）
+kaiwu install                # 传统安装到编程工具
 kaiwu toggle                 # 一键开关（对比开/关效果）
 kaiwu stats                  # 查看经验库/错误库统计
 ```
@@ -326,6 +346,23 @@ AI 增强功能（智能规划、错误分析、经验提炼）需要 DeepSeek A
 cl-kaiwu/
 ├── pyproject.toml          # 项目配置
 ├── README.md
+├── .claude-plugin/         # Claude Code Plugin 清单
+│   └── plugin.json
+├── .mcp.json               # 插件内嵌 MCP Server 定义
+├── commands/               # 斜杠命令（6 个）
+│   ├── kaiwu-plan.md
+│   ├── kaiwu-lessons.md
+│   ├── kaiwu-record.md
+│   ├── kaiwu-scene.md
+│   ├── kaiwu-doctor.md
+│   └── kaiwu-stats.md
+├── skills/                 # 自动触发技能（3 个）
+│   ├── kaiwu-workflow/
+│   ├── kaiwu-diagnosis/
+│   └── kaiwu-experience/
+├── hooks/                  # 事件钩子
+│   ├── hooks.json
+│   └── scripts/
 ├── kaiwu/                  # 核心包
 │   ├── __init__.py
 │   ├── __main__.py         # python -m kaiwu 入口
