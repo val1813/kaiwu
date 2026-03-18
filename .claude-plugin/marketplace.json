@@ -1,0 +1,27 @@
+{
+  "name": "kaiwu",
+  "description": "AI Coding enhancement plugin for Claude Code, powered by DeepSeek",
+  "owner": {
+    "name": "kaiwu",
+    "email": "valhuang@kaiwucl.com"
+  },
+  "metadata": {
+    "description": "Planning, diagnosis, and experience learning for Claude Code",
+    "version": "0.2.0"
+  },
+  "plugins": [
+    {
+      "name": "kaiwu",
+      "description": "AI Coding enhancement engine with planning, diagnosis, and experience learning powered by DeepSeek",
+      "version": "0.2.0",
+      "source": "./",
+      "author": {
+        "name": "kaiwu",
+        "email": "valhuang@kaiwucl.com"
+      },
+      "keywords": ["ai-coding", "planning", "diagnosis", "experience", "deepseek"],
+      "category": "development",
+      "strict": false
+    }
+  ]
+}
