@@ -56,6 +56,12 @@ exclude = ["_backup_old/", "data/error_kb_backup.json", "kaiwu-official-site.htm
 
 [tool.hatch.build.targets.wheel.force-include]
 "data" = "data"
+".claude-plugin" = ".claude-plugin"
+".mcp.json" = ".mcp.json"
+"commands" = "commands"
+"skills" = "skills"
+"hooks" = "hooks"
+"CLAUDE.md" = "CLAUDE.md"
 
 [tool.ruff]
 line-length = 100

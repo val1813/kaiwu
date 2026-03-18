@@ -450,13 +450,14 @@ def _find_plugin_root() -> Path | None:
     """查找 kaiwu 插件根目录（含 .claude-plugin/plugin.json 的目录）
 
     查找顺序：
-    1. __file__ 的 parent.parent（开发模式 pip install -e）
-    2. pip show kaiwu 的 Location/Editable project location
-    3. 当前工作目录
+    1. __file__ 的 parent.parent（开发模式 pip install -e，或仓库直接运行）
+    2. pip show 的 Editable project location
+    3. site-packages 根目录（pip install 非 editable 模式，插件文件通过 force-include 打包）
+    4. 当前工作目录
     """
     import subprocess as sp
 
-    # 1. 直接从源码路径推断
+    # 1. 直接从源码路径推断（开发模式）
     candidate = Path(__file__).parent.parent.resolve()
     if (candidate / ".claude-plugin" / "plugin.json").exists():
         return candidate
@@ -464,24 +465,34 @@ def _find_plugin_root() -> Path | None:
     # 2. 从 pip show 获取（处理 editable install）
     try:
         result = sp.run(
-            [sys.executable, "-m", "pip", "show", "kaiwu"],
+            [sys.executable, "-m", "pip", "show", "cl-kaiwu"],
             capture_output=True, text=True, timeout=10
         )
         for line in result.stdout.split("\n"):
-            # Editable project location: D:\kaiwu\kaiwu0.2
             if line.startswith("Editable project location:"):
-                loc = Path(line.split(":", 1)[1].strip())
-                if (loc / ".claude-plugin" / "plugin.json").exists():
-                    return loc
-            # Location: D:\kaiwu\kaiwu0.2 (非 site-packages 的情况)
-            if line.startswith("Location:"):
                 loc = Path(line.split(":", 1)[1].strip())
                 if (loc / ".claude-plugin" / "plugin.json").exists():
                     return loc
     except Exception:
         pass
 
-    # 3. 当前工作目录
+    # 3. site-packages 根目录（force-include 把插件文件装到了包安装位置的顶层）
+    try:
+        result = sp.run(
+            [sys.executable, "-m", "pip", "show", "-f", "cl-kaiwu"],
+            capture_output=True, text=True, timeout=10
+        )
+        location = None
+        for line in result.stdout.split("\n"):
+            if line.startswith("Location:"):
+                location = Path(line.split(":", 1)[1].strip())
+                break
+        if location and (location / ".claude-plugin" / "plugin.json").exists():
+            return location
+    except Exception:
+        pass
+
+    # 4. 当前工作目录
     cwd = Path.cwd()
     if (cwd / ".claude-plugin" / "plugin.json").exists():
         return cwd
