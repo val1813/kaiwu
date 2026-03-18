@@ -1,4 +1,4 @@
-# cl-kaiwu 开物 v0.2---内嵌deepseek的claude code/codex/cursor的超级职能外挂
+# cl-kaiwu 开物 v0.2---内嵌deepseek的claude code/codex/cursor的超级智能外挂
 先看疗效
 <img width="1376" height="388" alt="image" src="https://github.com/user-attachments/assets/6a340d12-0b81-45c4-8a60-90166e5fa68c" />
 
