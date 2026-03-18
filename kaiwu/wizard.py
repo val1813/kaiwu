@@ -522,69 +522,6 @@ def _show_config():
         console.print(f"\n[bold]License:[/bold] {_mask_key(license_key)}")
 
 
-# ── 隐私通知（首次运行） ──────────────────────────────────────────
-
-_PRIVACY_FLAG = KAIWU_HOME / ".privacy_agreed"
-
-
-def _show_privacy_notice() -> bool:
-    """首次运行时的隐私说明。
-
-    返回用户是否同意 Level 1 匿名统计。
-    """
-    console.print(Panel(
-        """[bold]开物数据说明[/bold]
-
-为了让知识库越来越准确，开物会在你使用时学习。
-以下说明我们收集什么、不收集什么：
-
-[green]默认收集（帮助改善工具，完全匿名）[/green]
-   任务类型（如：backend_api、debug）
-   成功/失败结果
-   错误类型名（如：UnicodeDecodeError，不含错误内容）
-   重试次数、操作系统类型（windows/mac/linux）
-
-[red]永远不收集[/red]
-   你的代码内容
-   文件路径、域名、IP 地址
-   任务描述原文
-   任何可识别你身份的信息
-
-[dim]可选共享（默认关闭）[/dim]
-   去掉所有专有名词后的经验模式
-   开启方法：kaiwu config set privacy.data_sharing true
-
-[dim]随时可以查看或删除：[/dim]
-[dim]  kaiwu data show    — 查看本地数据[/dim]
-[dim]  kaiwu data delete  — 删除所有本地数据[/dim]
-[dim]  kaiwu data export  — 导出为 JSON[/dim]""",
-        title="数据与隐私",
-        border_style="blue",
-    ))
-
-    agree = click.confirm(
-        "\n同意匿名统计？（不影响工具功能，仅帮助改善开物）",
-        default=True,
-    )
-
-    # 保存用户选择
-    config = get_config()
-    config.set("privacy.telemetry", agree)
-    config.set("privacy.data_sharing", False)
-    reload_config()
-
-    # 标记已展示过隐私通知
-    KAIWU_HOME.mkdir(parents=True, exist_ok=True)
-    _PRIVACY_FLAG.write_text("1", encoding="utf-8")
-
-    if not agree:
-        console.print("[dim]已关闭匿名统计。之后可用 kaiwu config set privacy.telemetry true 重新开启[/dim]")
-    else:
-        console.print("[green]感谢支持！匿名统计已开启。[/green]")
-
-    return agree
-
-
 # ── 主菜单 ────────────────────────────────────────────────────────
 
 def run_wizard():
@@ -594,21 +531,15 @@ def run_wizard():
         subtitle="kaiwu config",
     ))
 
-    # 首次运行：展示隐私通知
-    if not _PRIVACY_FLAG.exists():
-        _show_privacy_notice()
-        console.print()
-
     while True:
         console.print("\n[bold]请选择操作：[/bold]")
         console.print("  1. 内嵌模型 API 设置")
         console.print("  2. Coding 软件 Key 设置")
         console.print("  3. 查看当前配置")
-        console.print("  4. 隐私设置")
         console.print("  0. 退出")
         console.print()
 
-        choice = Prompt.ask("请选择", choices=["0", "1", "2", "3", "4"], default="0")
+        choice = Prompt.ask("请选择", choices=["0", "1", "2", "3"], default="0")
 
         if choice == "0":
             console.print("[dim]再见！[/dim]")
@@ -619,5 +550,3 @@ def run_wizard():
             _setup_coding_software()
         elif choice == "3":
             _show_config()
-        elif choice == "4":
-            _show_privacy_notice()

@@ -37,5 +37,8 @@ data/error_kb_backup.json
 kaiwu-official-site.html
 产品核心.md
 
+# Claude Code local config
+.claude/
+
 # User data (local)
 ~/.kaiwu/

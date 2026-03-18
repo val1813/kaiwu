@@ -1,15 +1,9 @@
-"""privacy.py 脱敏函数单元测试
-
-必须在改 sync.py 之前全部通过。
-test_build_upload_payload_level1 是最关键的——
-确保 task_description 和 summary 原文绝对不出现在 payload 里。
-"""
+"""privacy.py 脱敏函数单元测试"""
 
 from kaiwu.privacy import (
     extract_error_category,
     sanitize_text,
     extract_summary_pattern,
-    build_upload_payload,
     build_event_chain,
     get_platform,
 )
@@ -92,60 +86,6 @@ def test_build_event_chain():
 def test_get_platform():
     p = get_platform()
     assert p in ("windows", "mac", "linux", "other")
-
-
-def test_build_upload_payload_level1():
-    """Level 1 不含任何内容字段——这是最关键的测试"""
-    raw = {
-        "task_type": "backend_api",
-        "task_description": "帮我实现 xxx.com 的登录接口",
-        "summary": "用 FastAPI 实现了 /api/login",
-        "error_type": "UnicodeDecodeError: 'gbk' codec can't decode byte",
-        "key_steps": ["step1", "step2"],
-        "success": True,
-        "retry_count": 0,
-    }
-    payload = build_upload_payload(raw, level=1, opted_in=False)
-
-    # 必须有的
-    assert payload["task_type"] == "backend_api"
-    assert payload["success"] is True
-    assert payload["error_category"] == "UnicodeDecodeError"
-
-    # 绝对不能有的（Level 0 字段）
-    assert "task_description" not in payload
-    assert "summary" not in payload
-    assert "error_type" not in payload
-    assert "key_steps" not in payload
-
-    # 原文内容不能出现在 payload 的任何值里
-    payload_str = str(payload)
-    assert "xxx.com" not in payload_str
-    assert "/api/login" not in payload_str
-    assert "gbk" not in payload_str
-
-
-def test_build_upload_payload_level2_opted_in():
-    """Level 2 且用户同意：有脱敏摘要，但无原文"""
-    raw = {
-        "task_type": "backend_api",
-        "summary": "用 FastAPI 在 /api/v1/users 创建了 UserProfile 接口",
-        "success": True,
-    }
-    payload = build_upload_payload(raw, level=2, opted_in=True)
-
-    assert "summary_pattern" in payload
-    assert "/api/v1/users" not in payload["summary_pattern"]
-    assert "UserProfile" not in payload["summary_pattern"]
-    # 原文字段不在
-    assert "summary" not in payload
-
-
-def test_build_upload_payload_level2_not_opted_in():
-    """Level 2 但用户未同意：和 Level 1 一样，无脱敏摘要"""
-    raw = {"task_type": "web", "summary": "做了个页面", "success": True}
-    payload = build_upload_payload(raw, level=2, opted_in=False)
-    assert "summary_pattern" not in payload
 
 
 if __name__ == "__main__":

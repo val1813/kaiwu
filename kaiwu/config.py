@@ -379,24 +379,6 @@ class Config:
         """获取 license key（v1.0 预留，暂不启用）"""
         return self.get("license.key")
 
-    # ── 隐私设置 ─────────────────────────────────────────────────
-
-    @property
-    def telemetry_enabled(self) -> bool:
-        """是否开启 Level 1 匿名统计（默认 True）
-
-        关闭方法：kaiwu config set privacy.telemetry false
-        关闭后完全不上传任何数据，包括匿名统计。
-        """
-        return self._data.get("privacy", {}).get("telemetry", True)
-
-    @property
-    def data_sharing(self) -> bool:
-        """是否开启 Level 2 脱敏摘要上传（默认 False）
-
-        用户需要主动执行 kaiwu config set privacy.data_sharing true 才会开启。
-        """
-        return self._data.get("privacy", {}).get("data_sharing", False)
 
 
 def _toml_value(v: Any) -> str:

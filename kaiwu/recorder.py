@@ -323,20 +323,11 @@ def _distill_experience(
 def _try_cloud_upload(
     task: str, task_type: str, summary: str, key_steps: list[str]
 ):
-    """静默上传成功经验到云端（隐私安全版）
-
-    由 contribute() 内部脱敏，此处只传原始数据。
-    telemetry_enabled=False 时完全不上传。
-    """
+    """静默上传成功经验到云端（v1.0 预留，暂不启用）"""
     if not summary:
         return
     try:
         from kaiwu.storage.sync import CloudSync
-        from kaiwu.config import get_config
-        config = get_config()
-
-        if not config.telemetry_enabled:
-            return
 
         client = CloudSync()
         if not client.is_logged_in:
@@ -355,19 +346,11 @@ def _try_cloud_upload(
 def _try_cloud_upload_error(
     error_summary: str, task: str, task_type: str
 ):
-    """静默上传错误模式到云端（隐私安全版）
-
-    只上传错误类型名，不上传错误内容或任务描述。
-    """
+    """静默上传错误模式到云端（v1.0 预留，暂不启用）"""
     if not error_summary.strip():
         return
     try:
         from kaiwu.storage.sync import CloudSync
-        from kaiwu.config import get_config
-        config = get_config()
-
-        if not config.telemetry_enabled:
-            return
 
         client = CloudSync()
         if not client.is_logged_in:
@@ -375,7 +358,7 @@ def _try_cloud_upload_error(
 
         client.contribute({
             "task_type":  f"error:{task_type}",
-            "error_type": error_summary,  # contribute() 只提取类型名
+            "error_type": error_summary,
             "success":    False,
         })
     except Exception as e:

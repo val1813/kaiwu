@@ -2,8 +2,11 @@
 
 核心命令：
   kaiwu serve         启动 MCP Server
+  kaiwu launch        验证 MCP 连接后启动 Claude Code（推荐）
+  kaiwu doctor        诊断 MCP 连接状态（--fix 自动修复）
   kaiwu config        交互式配置向导
   kaiwu install       安装到各平台（Claude Code/Cursor/VS Code/Codex）
+  kaiwu install --plugin  安装为 Claude Code Plugin（推荐）
   kaiwu stats         查看经验库/错误库统计
 
 账号命令：
@@ -18,14 +21,11 @@
   kaiwu sync          同步云端库
   kaiwu contribute    上传经验到社区
 
-数据管理：
-  kaiwu data show     查看本地数据
-  kaiwu data delete   删除所有本地数据
-  kaiwu data export   导出数据为 JSON
 """
 
 import json
 import sys
+import time
 from pathlib import Path
 
 import click
@@ -36,9 +36,64 @@ from kaiwu.config import get_config, KAIWU_HOME, CONFIG_PATH
 
 console = Console()
 
+# ── 版本常量 ──
+CURRENT_VERSION = "0.2.0"
+GITHUB_REPO = "val1813/kaiwu"
+UPDATE_CHECK_CACHE = KAIWU_HOME / ".update_check.json"
+UPDATE_CHECK_INTERVAL = 86400  # 24 小时
+
+
+def _check_update_quiet() -> str | None:
+    """后台检查 GitHub 最新版本，返回提示字符串或 None
+
+    - 24h 内只查一次（缓存在 ~/.kaiwu/.update_check.json）
+    - 网络失败静默返回 None，绝不阻塞
+    """
+    try:
+        # 检查缓存
+        if UPDATE_CHECK_CACHE.exists():
+            cache = json.loads(UPDATE_CHECK_CACHE.read_text(encoding="utf-8"))
+            if time.time() - cache.get("checked_at", 0) < UPDATE_CHECK_INTERVAL:
+                latest = cache.get("latest_version", "")
+                if latest and latest != CURRENT_VERSION and latest > CURRENT_VERSION:
+                    return (
+                        f"[yellow]有新版本可用: v{latest}（当前 v{CURRENT_VERSION}）[/yellow]\n"
+                        f"[dim]升级: pip install --upgrade git+https://github.com/{GITHUB_REPO}.git[/dim]"
+                    )
+                return None
+
+        # 请求 GitHub API（超时 3s）
+        import urllib.request
+        import urllib.error
+
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        req = urllib.request.Request(url, headers={"Accept": "application/vnd.github.v3+json"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        tag = data.get("tag_name", "").lstrip("vV")
+        if not tag:
+            return None
+
+        # 写缓存
+        UPDATE_CHECK_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        UPDATE_CHECK_CACHE.write_text(
+            json.dumps({"latest_version": tag, "checked_at": time.time()}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        if tag != CURRENT_VERSION and tag > CURRENT_VERSION:
+            return (
+                f"[yellow]有新版本可用: v{tag}（当前 v{CURRENT_VERSION}）[/yellow]\n"
+                f"[dim]升级: pip install --upgrade git+https://github.com/{GITHUB_REPO}.git[/dim]"
+            )
+    except Exception:
+        pass  # 网络不通、API 限流、解析失败都静默
+    return None
+
 
 @click.group()
-@click.version_option(version="0.2.0", prog_name="cl-kaiwu")
+@click.version_option(version=CURRENT_VERSION, prog_name="cl-kaiwu")
 def main():
     """开物 — AI Coding 增强引擎"""
     pass
@@ -312,8 +367,18 @@ def config_show():
               default="all", help="目标平台")
 @click.option("--project-dir", type=click.Path(exists=True), default=".",
               help="项目目录（默认当前目录）")
-def install(platform, project_dir):
-    """安装 kaiwu 到 AI 编程工具"""
+@click.option("--plugin", is_flag=True, help="安装为 Claude Code Plugin（推荐）")
+def install(platform, project_dir, plugin):
+    """安装 kaiwu 到 AI 编程工具
+
+    \b
+    kaiwu install              传统安装（写 CLAUDE.md + 注册 MCP）
+    kaiwu install --plugin     Plugin 模式安装（推荐，更稳定）
+    """
+    if plugin:
+        _install_claude_code_plugin()
+        return
+
     project = Path(project_dir).resolve()
     console.print(f"\n[bold cyan]安装 cl-kaiwu 到 {project}[/bold cyan]\n")
 
@@ -340,7 +405,7 @@ def install(platform, project_dir):
 
 
 def _install_claude_code(project: Path):
-    """生成 CLAUDE.md"""
+    """生成 CLAUDE.md（传统模式，推荐用 --plugin 替代）"""
     content = """# kaiwu 开物 — AI Coding 增强
 
 > kaiwu MCP Server 运行时，优先调用它获取规划和诊断。
@@ -379,6 +444,101 @@ def _install_claude_code(project: Path):
             claude_md.write_text(existing + "\n\n" + content, encoding="utf-8")
     else:
         claude_md.write_text(content, encoding="utf-8")
+
+
+def _install_claude_code_plugin():
+    """安装 kaiwu 为 Claude Code Plugin（通过 junction 链接）"""
+    import subprocess as sp
+
+    plugin_root = Path(__file__).parent.parent.resolve()
+    plugins_dir = Path.home() / ".claude" / "plugins"
+    target = plugins_dir / "kaiwu"
+
+    console.print("\n[bold cyan]安装 kaiwu 为 Claude Code Plugin[/bold cyan]\n")
+
+    # 1. 检查插件清单是否存在
+    manifest = plugin_root / ".claude-plugin" / "plugin.json"
+    if not manifest.exists():
+        console.print(f"  [red]FAIL[/red] 插件清单不存在: {manifest}")
+        console.print("  请确保在 kaiwu 仓库根目录运行此命令")
+        return
+
+    console.print(f"  [green]OK[/green] 插件清单: {manifest}")
+
+    # 2. 模板化 .mcp.json 中的 Python 路径
+    mcp_json_path = plugin_root / ".mcp.json"
+    python_path = sys.executable.replace("\\", "/")
+    mcp_config = {
+        "kaiwu": {
+            "command": python_path,
+            "args": ["-m", "kaiwu.server"],
+            "cwd": "${CLAUDE_PLUGIN_ROOT}",
+            "env": {
+                "PYTHONIOENCODING": "utf-8"
+            }
+        }
+    }
+    mcp_json_path.write_text(
+        json.dumps(mcp_config, indent=2, ensure_ascii=False),
+        encoding="utf-8"
+    )
+    console.print(f"  [green]OK[/green] .mcp.json 已更新 (python={python_path})")
+
+    # 3. 创建 junction 链接
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+
+    if target.exists() or target.is_symlink():
+        # Check if it already points to the right place
+        try:
+            if target.resolve() == plugin_root:
+                console.print(f"  [green]OK[/green] Junction 已存在且正确: {target}")
+            else:
+                console.print(f"  [yellow]WARN[/yellow] Junction 存在但指向: {target.resolve()}")
+                console.print(f"  删除后重新创建...")
+                # Remove existing junction/dir
+                if target.is_dir():
+                    sp.run(["cmd", "/c", "rmdir", str(target)], check=True)
+                else:
+                    target.unlink()
+                # Create new junction
+                sp.run(
+                    ["cmd", "/c", "mklink", "/J", str(target), str(plugin_root)],
+                    check=True
+                )
+                console.print(f"  [green]OK[/green] Junction 已重建: {target} -> {plugin_root}")
+        except Exception as e:
+            console.print(f"  [red]FAIL[/red] Junction 处理失败: {e}")
+            return
+    else:
+        try:
+            sp.run(
+                ["cmd", "/c", "mklink", "/J", str(target), str(plugin_root)],
+                check=True
+            )
+            console.print(f"  [green]OK[/green] Junction 已创建: {target} -> {plugin_root}")
+        except Exception as e:
+            console.print(f"  [red]FAIL[/red] 创建 Junction 失败: {e}")
+            console.print("  可手动执行: mklink /J \"{target}\" \"{plugin_root}\"")
+            return
+
+    # 4. 检查旧 MCP 注册并提示
+    claude_settings = Path.home() / ".claude" / "settings.json"
+    if claude_settings.exists():
+        try:
+            data = json.loads(claude_settings.read_text(encoding="utf-8"))
+            servers = data.get("mcpServers", {})
+            if "kaiwu" in servers:
+                console.print()
+                console.print("  [yellow]提示[/yellow] 检测到 settings.json 中有旧的 mcpServers.kaiwu 配置")
+                console.print("  Plugin 模式下 MCP 服务器由插件内 .mcp.json 管理，")
+                console.print("  建议移除 settings.json 中的 kaiwu MCP 配置以避免重复注册。")
+                console.print(f"  配置文件: {claude_settings}")
+        except Exception:
+            pass
+
+    console.print()
+    console.print("[green]Plugin 安装完成！[/green]")
+    console.print("[dim]重启 Claude Code 后生效。可用 /kaiwu-plan 等命令验证。[/dim]")
 
 
 def _install_cursor(project: Path):
@@ -561,6 +721,310 @@ def toggle(action):
 
 
 @main.command()
+@click.option("--fix", is_flag=True, help="自动修复发现的问题")
+def doctor(fix):
+    """诊断 kaiwu MCP Server 连接状态
+
+    \b
+    kaiwu doctor        检查所有组件
+    kaiwu doctor --fix  检查并自动修复
+    """
+    import subprocess as sp
+    import threading
+    import time
+
+    checks_passed = 0
+    checks_failed = 0
+
+    console.print("\n[bold cyan]kaiwu 连接诊断[/bold cyan]\n")
+
+    # ── 1. Python 环境 ──
+    console.print("[bold]1. Python 环境[/bold]")
+    try:
+        import kaiwu as _kw
+        console.print(f"   [green]OK[/green] kaiwu 已安装: {_kw.__file__}")
+        checks_passed += 1
+    except ImportError:
+        console.print("   [red]FAIL[/red] kaiwu 未安装")
+        if fix:
+            console.print("   [yellow]修复中...[/yellow]")
+            sp.run([sys.executable, "-m", "pip", "install", "-e", "."], cwd=str(Path(__file__).parent.parent))
+        checks_failed += 1
+
+    try:
+        import mcp  # noqa: F811
+        pip_out = sp.run([sys.executable, "-m", "pip", "show", "mcp"],
+                         capture_output=True, text=True)
+        for line in pip_out.stdout.split("\n"):
+            if line.startswith("Version:"):
+                ver = line.split(":")[1].strip()
+                console.print(f"   [green]OK[/green] mcp {ver}")
+                checks_passed += 1
+                break
+    except ImportError:
+        console.print("   [red]FAIL[/red] mcp 包未安装")
+        if fix:
+            sp.run([sys.executable, "-m", "pip", "install", "mcp[cli]>=1.0"])
+        checks_failed += 1
+
+    # ── 2. 配置文件 ──
+    console.print("[bold]2. 平台注册[/bold]")
+
+    platforms = [
+        ("Claude Code", Path.home() / ".claude" / "settings.json"),
+        ("Cursor", Path.home() / ".cursor" / "mcp.json"),
+    ]
+
+    any_registered = False
+    for name, path in platforms:
+        if not path.exists():
+            console.print(f"   [dim]SKIP[/dim] {name}: 配置文件不存在")
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            servers = data.get("mcpServers", {})
+            if "kaiwu" in servers:
+                disabled = servers["kaiwu"].get("disabled", False)
+                if disabled:
+                    console.print(f"   [yellow]WARN[/yellow] {name}: kaiwu 已注册但被禁用")
+                    if fix:
+                        servers["kaiwu"].pop("disabled", None)
+                        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+                        console.print(f"   [green]已修复[/green] 已启用 kaiwu")
+                else:
+                    console.print(f"   [green]OK[/green] {name}: kaiwu 已注册")
+                    any_registered = True
+                    checks_passed += 1
+            else:
+                console.print(f"   [red]FAIL[/red] {name}: kaiwu 未注册")
+                if fix:
+                    _add_mcp_to_settings(path, name.lower().replace(" ", "-"))
+                    console.print(f"   [green]已修复[/green] 已写入 MCP 配置")
+                    any_registered = True
+                checks_failed += 1
+        except Exception as e:
+            console.print(f"   [red]FAIL[/red] {name}: {e}")
+            checks_failed += 1
+
+    if not any_registered and not fix:
+        console.print("   [yellow]提示: 运行 kaiwu install 或 kaiwu doctor --fix 注册[/yellow]")
+
+    # ── 3. MCP 握手测试 ──
+    console.print("[bold]3. MCP Server 握手[/bold]")
+    try:
+        import os
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        proc = sp.Popen(
+            [sys.executable, "-m", "kaiwu.server"],
+            stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE,
+            env=env,
+        )
+
+        init_req = json.dumps({
+            "jsonrpc": "2.0", "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "kaiwu-doctor", "version": "1.0"},
+            },
+        })
+        proc.stdin.write((init_req + "\n").encode("utf-8"))
+        proc.stdin.flush()
+
+        stdout_line = [None]
+        def _read():
+            stdout_line[0] = proc.stdout.readline()
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+        t.join(timeout=10)
+
+        if stdout_line[0]:
+            resp = json.loads(stdout_line[0])
+            if "result" in resp and "serverInfo" in resp["result"]:
+                info = resp["result"]["serverInfo"]
+                console.print(f"   [green]OK[/green] initialize 成功: {info['name']} v{info['version']}")
+                checks_passed += 1
+
+                # 继续测试 tools/list
+                notif = json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+                proc.stdin.write((notif + "\n").encode("utf-8"))
+                proc.stdin.flush()
+
+                list_req = json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+                proc.stdin.write((list_req + "\n").encode("utf-8"))
+                proc.stdin.flush()
+
+                tools_line = [None]
+                def _read2():
+                    tools_line[0] = proc.stdout.readline()
+                t2 = threading.Thread(target=_read2, daemon=True)
+                t2.start()
+                t2.join(timeout=5)
+
+                if tools_line[0]:
+                    tools_resp = json.loads(tools_line[0])
+                    tools = tools_resp.get("result", {}).get("tools", [])
+                    names = [t["name"] for t in tools]
+                    console.print(f"   [green]OK[/green] {len(tools)} 个工具: {', '.join(names)}")
+                    checks_passed += 1
+                else:
+                    console.print("   [yellow]WARN[/yellow] tools/list 超时")
+                    checks_failed += 1
+            else:
+                console.print(f"   [red]FAIL[/red] 异常响应: {resp}")
+                checks_failed += 1
+        else:
+            console.print("   [red]FAIL[/red] 无响应（10s 超时）")
+            stderr = proc.stderr.read(2048).decode("utf-8", errors="replace")
+            if stderr:
+                console.print(f"   [dim]stderr: {stderr[:300]}[/dim]")
+            checks_failed += 1
+
+        proc.kill()
+
+    except Exception as e:
+        console.print(f"   [red]FAIL[/red] 握手异常: {e}")
+        checks_failed += 1
+
+    # ── 4. LLM 配置 ──
+    console.print("[bold]4. LLM 配置[/bold]")
+    try:
+        cfg = get_config()
+        if cfg.llm_api_key:
+            masked = cfg.llm_api_key[:6] + "..." + cfg.llm_api_key[-4:] if len(cfg.llm_api_key) > 10 else "***"
+            console.print(f"   [green]OK[/green] Provider: {cfg.active_provider_name}, Key: {masked}")
+            checks_passed += 1
+        else:
+            console.print("   [yellow]WARN[/yellow] 未配置 API Key（部分功能受限）")
+            console.print("   [dim]运行 kaiwu config 配置[/dim]")
+    except Exception as e:
+        console.print(f"   [yellow]WARN[/yellow] 配置读取失败: {e}")
+
+    # ── 汇总 ──
+    console.print()
+    if checks_failed == 0:
+        console.print(f"[bold green]诊断通过[/bold green] ({checks_passed} 项全部正常)")
+        console.print("[dim]可以启动 Claude Code 使用 kaiwu 了[/dim]")
+    else:
+        console.print(f"[bold yellow]发现 {checks_failed} 个问题[/bold yellow] ({checks_passed} 项正常)")
+        if not fix:
+            console.print("[dim]运行 kaiwu doctor --fix 尝试自动修复[/dim]")
+
+    # ── 版本更新检查 ──
+    update_msg = _check_update_quiet()
+    if update_msg:
+        console.print()
+        console.print(update_msg)
+    console.print()
+
+
+@main.command()
+@click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
+def launch(extra_args):
+    """验证 kaiwu 后启动 Claude Code
+
+    \b
+    kaiwu launch              验证 + 启动 claude
+    kaiwu launch -- --resume  传额外参数给 claude
+    """
+    import subprocess as sp
+    import threading
+    import time
+    import os
+    import shutil
+
+    console.print("\n[bold cyan]kaiwu launch[/bold cyan] — 验证 MCP 后启动 Claude Code\n")
+
+    # ── 检查 claude 命令是否存在 ──
+    claude_cmd = shutil.which("claude")
+    if not claude_cmd:
+        console.print("[red]未找到 claude 命令，请先安装 Claude Code[/red]")
+        console.print("[dim]npm install -g @anthropic-ai/claude-code[/dim]")
+        return
+
+    # ── 版本更新检查 ──
+    update_msg = _check_update_quiet()
+    if update_msg:
+        console.print(update_msg)
+        console.print()
+
+    # ── 快速 MCP 握手验证 ──
+    console.print("[dim]验证 kaiwu MCP Server...[/dim]")
+
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+
+    try:
+        proc = sp.Popen(
+            [sys.executable, "-m", "kaiwu.server"],
+            stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE,
+            env=env,
+        )
+
+        init_req = json.dumps({
+            "jsonrpc": "2.0", "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "kaiwu-launch", "version": "1.0"},
+            },
+        })
+        proc.stdin.write((init_req + "\n").encode("utf-8"))
+        proc.stdin.flush()
+
+        stdout_line = [None]
+        def _read():
+            stdout_line[0] = proc.stdout.readline()
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+        t.join(timeout=8)
+
+        proc.kill()
+
+        if stdout_line[0]:
+            resp = json.loads(stdout_line[0])
+            if "result" in resp:
+                console.print("[green]OK[/green] kaiwu MCP Server 就绪\n")
+            else:
+                console.print("[red]FAIL[/red] MCP 握手异常，运行 kaiwu doctor 查看详情")
+                return
+        else:
+            console.print("[red]FAIL[/red] MCP Server 无响应（8s 超时）")
+            console.print("[dim]运行 kaiwu doctor 诊断具体问题[/dim]")
+            return
+
+    except Exception as e:
+        console.print(f"[red]FAIL[/red] 验证失败: {e}")
+        return
+
+    # ── 检查 settings.json 中 kaiwu 是否注册 ──
+    claude_settings = Path.home() / ".claude" / "settings.json"
+    if claude_settings.exists():
+        data = json.loads(claude_settings.read_text(encoding="utf-8"))
+        servers = data.get("mcpServers", {})
+        if "kaiwu" not in servers:
+            console.print("[yellow]kaiwu 未注册到 Claude Code，自动注册中...[/yellow]")
+            _add_mcp_to_settings(claude_settings, "claude-code")
+        elif servers["kaiwu"].get("disabled"):
+            console.print("[yellow]kaiwu 已禁用，自动启用中...[/yellow]")
+            servers["kaiwu"].pop("disabled", None)
+            claude_settings.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    else:
+        console.print("[yellow]Claude Code 配置不存在，自动创建...[/yellow]")
+        _add_mcp_to_settings(claude_settings, "claude-code")
+
+    # ── 启动 Claude Code ──
+    console.print("[bold]启动 Claude Code...[/bold]\n")
+    cmd = [claude_cmd] + list(extra_args)
+    result = sp.run(cmd)
+    sys.exit(result.returncode)
+
+
+@main.command()
 def contribute():
     """上传本地优质经验贡献社区"""
     from kaiwu.storage.sync import CloudSync, CloudSyncError
@@ -713,138 +1177,6 @@ def logout():
     if TOKEN_PATH.exists():
         TOKEN_PATH.unlink()
     console.print("[green]已登出[/green]")
-
-
-# ── 数据管理命令组 ────────────────────────────────────────────────
-
-@main.group()
-def data():
-    """数据管理：查看、删除、导出本地数据"""
-    pass
-
-
-@data.command("show")
-def data_show():
-    """查看本地存储了哪些数据"""
-    import json
-    from kaiwu.config import KAIWU_HOME, EXPERIENCE_PATH, ERROR_KB_PATH, get_config
-
-    console.print("\n[bold]开物本地数据概览[/bold]\n")
-
-    # 经验库
-    if EXPERIENCE_PATH.exists():
-        try:
-            raw = json.loads(EXPERIENCE_PATH.read_text(encoding="utf-8"))
-            entries = raw.get("entries", [])
-            if isinstance(entries, list):
-                active = [e for e in entries if not e.get("deprecated", False)]
-                console.print(f"  经验库：{len(active)} 条（已废弃 {len(entries)-len(active)} 条）")
-            else:
-                console.print(f"  经验库：{len(entries)} 条")
-        except Exception:
-            console.print("  经验库：读取失败")
-    else:
-        console.print("  经验库：空")
-
-    # 错误库
-    if ERROR_KB_PATH.exists():
-        try:
-            raw = json.loads(ERROR_KB_PATH.read_text(encoding="utf-8"))
-            count = len(raw.get("entries", {}))
-            console.print(f"  错误库：{count} 条")
-        except Exception:
-            console.print("  错误库：读取失败")
-    else:
-        console.print("  错误库：空")
-
-    # 会话
-    from kaiwu.config import SESSIONS_DIR
-    if SESSIONS_DIR.exists():
-        sessions = list(SESSIONS_DIR.glob("*.json"))
-        console.print(f"  会话记录：{len(sessions)} 个")
-    else:
-        console.print("  会话记录：空")
-
-    # 账号
-    from kaiwu.storage.sync import TOKEN_PATH
-    if TOKEN_PATH.exists():
-        try:
-            token_data = json.loads(TOKEN_PATH.read_text(encoding="utf-8"))
-            console.print(f"\n  账号：{token_data.get('username', '未知')} "
-                          f"({token_data.get('plan', '未知')})")
-        except Exception:
-            pass
-
-    # 隐私设置
-    config = get_config()
-    console.print(f"\n  隐私设置：")
-    console.print(f"    匿名统计 (Level 1)：{'开启' if config.telemetry_enabled else '已关闭'}")
-    console.print(f"    脱敏摘要 (Level 2)：{'开启' if config.data_sharing else '关闭（默认）'}")
-
-    console.print(f"\n  [dim]数据路径：{KAIWU_HOME}[/dim]")
-    console.print("  [dim]删除数据：kaiwu data delete[/dim]")
-    console.print("  [dim]导出数据：kaiwu data export[/dim]\n")
-
-
-@data.command("delete")
-@click.option("--confirm", is_flag=True, help="跳过确认提示")
-def data_delete(confirm: bool):
-    """删除所有本地数据（不可恢复）"""
-    from kaiwu.config import EXPERIENCE_PATH, ERROR_KB_PATH, SESSIONS_DIR
-
-    if not confirm:
-        click.confirm(
-            "将删除所有本地经验库、错误库、会话数据。\n"
-            "云端数据不受影响。确认删除？",
-            abort=True
-        )
-
-    deleted = []
-    for path in [EXPERIENCE_PATH, ERROR_KB_PATH]:
-        if path.exists():
-            path.unlink()
-            deleted.append(path.name)
-
-    # 清空会话目录
-    if SESSIONS_DIR.exists():
-        count = 0
-        for f in SESSIONS_DIR.glob("*.json"):
-            f.unlink()
-            count += 1
-        if count:
-            deleted.append(f"sessions ({count} 个)")
-
-    if deleted:
-        console.print(f"[green]已删除：{', '.join(deleted)}[/green]")
-    else:
-        console.print("[dim]没有找到本地数据文件[/dim]")
-
-
-@data.command("export")
-@click.option("--output", "-o", default="kaiwu_data_export.json",
-              help="导出文件路径")
-def data_export(output: str):
-    """导出所有本地数据为 JSON（你的数据你能带走）"""
-    import json
-    from kaiwu.config import EXPERIENCE_PATH, ERROR_KB_PATH
-
-    export_data = {}
-    for name, path in [
-        ("experiences", EXPERIENCE_PATH),
-        ("error_kb", ERROR_KB_PATH),
-    ]:
-        if path.exists():
-            try:
-                export_data[name] = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-
-    output_path = Path(output)
-    output_path.write_text(
-        json.dumps(export_data, ensure_ascii=False, indent=2),
-        encoding="utf-8"
-    )
-    console.print(f"[green]数据已导出到：{output_path.absolute()}[/green]")
 
 
 if __name__ == "__main__":

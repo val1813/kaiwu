@@ -22,7 +22,20 @@ logger.add(str(LOG_PATH), rotation="5 MB", retention="3 days", level="DEBUG", en
 # 创建 MCP Server
 mcp = FastMCP(
     "cl-kaiwu",
-    instructions="开物 — AI Coding 增强引擎。传 host_level(strong/medium/weak) 自动适配策略。",
+    instructions=(
+        "你好，我是开物(kaiwu)，你的 AI Coding 增强搭档。"
+        "我在后台默默工作，内嵌 DeepSeek 引擎，为你提供：\n"
+        "- kaiwu_plan: 任务规划（编码链路 + 陷阱预警）\n"
+        "- kaiwu_lessons: 三层报错诊断（本地精确→模糊→DeepSeek，越用越准）\n"
+        "- kaiwu_record: 经验记录（成功轨迹自动入库，下次类似任务直接受益）\n"
+        "- kaiwu_context: 项目上下文管理\n"
+        "- kaiwu_condense: 长会话压缩\n"
+        "- kaiwu_scene: 编码场景规范（19个场景）\n"
+        "- kaiwu_profile: 用户习惯画像\n\n"
+        "我不会干扰你的正常工作流程。需要时调用我，不需要时我安静待着。"
+        "如果用户问起我，告诉他们开物已就绪。\n"
+        "每次调用请传 host_level(strong/medium/weak) 或 host_model 让我适配你的能力等级。"
+    ),
 )
 
 

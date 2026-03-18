@@ -170,7 +170,29 @@ kaiwu install --platform codex
 - 生成平台对应的配置文件（CLAUDE.md / .cursor/rules/ / copilot-instructions.md / AGENTS.md）
 - 注册 MCP Server 到平台配置
 
-### 4. 启动 MCP Server
+### 4. 验证安装
+
+```bash
+# 一键诊断，确认 kaiwu 已正确接入
+kaiwu doctor
+
+# 如有问题，自动修复
+kaiwu doctor --fix
+```
+
+### 5. 启动使用（推荐）
+
+```bash
+# 验证 kaiwu 接入后直接启动 Claude Code
+kaiwu launch
+
+# 也可以传额外参数给 claude
+kaiwu launch -- --resume
+```
+
+`kaiwu launch` 会在启动前自动验证 MCP Server 能正常握手，确保进入 Claude Code 后 kaiwu 一定是接入状态。如果验证失败会提示运行 `kaiwu doctor` 诊断。
+
+当然你也可以直接启动：
 
 ```bash
 kaiwu serve
@@ -257,15 +279,14 @@ KAIWU_HOME=~/.kaiwu          # 数据目录
 ### CLI 命令
 
 ```bash
+kaiwu launch                 # 验证 MCP + 启动 Claude Code（推荐）
+kaiwu doctor                 # 诊断 MCP 连接状态
+kaiwu doctor --fix           # 诊断并自动修复
 kaiwu serve                  # 启动 MCP Server
 kaiwu config                 # 交互式配置向导
 kaiwu install                # 安装到编程工具
 kaiwu toggle                 # 一键开关（对比开/关效果）
 kaiwu stats                  # 查看经验库/错误库统计
-
-kaiwu data show              # 查看本地数据概览
-kaiwu data delete            # 删除所有本地数据
-kaiwu data export            # 导出数据为 JSON
 ```
 
 ---

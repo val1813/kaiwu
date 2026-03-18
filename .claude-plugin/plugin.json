@@ -1,0 +1,15 @@
+{
+  "name": "kaiwu",
+  "version": "0.2.0",
+  "description": "AI Coding enhancement engine with planning, diagnosis, and experience learning powered by DeepSeek",
+  "author": {
+    "name": "kaiwu",
+    "url": "https://github.com/val1813/kaiwu"
+  },
+  "repository": "https://github.com/val1813/kaiwu",
+  "license": "MIT",
+  "keywords": ["ai-coding", "planning", "diagnosis", "experience"],
+  "commands": ["./commands"],
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}

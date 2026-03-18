@@ -1,0 +1,10 @@
+{
+  "kaiwu": {
+    "command": "python",
+    "args": ["-m", "kaiwu.server"],
+    "cwd": "${CLAUDE_PLUGIN_ROOT}",
+    "env": {
+      "PYTHONIOENCODING": "utf-8"
+    }
+  }
+}
