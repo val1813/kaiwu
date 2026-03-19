@@ -757,11 +757,32 @@ def _install_mcp_server():
             data = {}
         data.setdefault("mcpServers", {})
         data["mcpServers"]["kaiwu"] = mcp_config
+
+        # 注册 SessionStart hook — 让模型知道 kaiwu 已加载
+        hook_cmd = f'{python_path} -m kaiwu.notify'
+        kaiwu_hook = {
+            "matcher": "*",
+            "hooks": [{
+                "type": "command",
+                "command": hook_cmd,
+                "timeout": 5,
+            }],
+        }
+        data.setdefault("hooks", {})
+        data["hooks"].setdefault("SessionStart", [])
+        # 去掉旧的 kaiwu hook（如果有），再追加新的
+        data["hooks"]["SessionStart"] = [
+            h for h in data["hooks"]["SessionStart"]
+            if "kaiwu" not in h.get("hooks", [{}])[0].get("command", "")
+        ]
+        data["hooks"]["SessionStart"].append(kaiwu_hook)
+
         claude_settings.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
         )
         platforms_done.append("Claude Code")
         console.print(f"  [green]OK[/green] Claude Code: {claude_settings}")
+        console.print(f"  [green]OK[/green] SessionStart hook: 模型启动时将收到 kaiwu 通知")
     except Exception as e:
         console.print(f"  [red]FAIL[/red] Claude Code: {e}")
 
