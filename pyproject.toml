@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cl-kaiwu"
-version = "0.2.0"
+version = "0.2.1"
 description = "开物 — AI Coding 增强引擎，为 Claude Code / Cursor / Codex 等主流工具提供 DeepSeek 辅助规划、经验库、报错库、中国场景库"
 readme = "README.md"
 license = "Apache-2.0"
