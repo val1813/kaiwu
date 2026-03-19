@@ -83,7 +83,8 @@ def test_classify_task_normal_experience_always_injected():
 
 
 def test_classify_task_china_keywords_active():
-    verdict = classify_task("处理微信支付回调接口", turns=0, error_count=0)
+    # "微信" + "wechat" = 2 hits in china category → active
+    verdict = classify_task("处理微信 wechat 支付回调接口", turns=0, error_count=0)
     assert verdict.level == "active"
 
 
