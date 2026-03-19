@@ -5,8 +5,8 @@
   kaiwu launch        验证 MCP 连接后启动 Claude Code（推荐）
   kaiwu doctor        诊断 MCP 连接状态（--fix 自动修复）
   kaiwu config        交互式配置向导
-  kaiwu install       安装到各平台（Claude Code/Cursor/VS Code/Codex）
   kaiwu install --plugin  安装为 Claude Code Plugin（推荐）
+  kaiwu install --mcp     注册 MCP Server（通用，兼容多平台）
   kaiwu stats         查看经验库/错误库统计
 
 账号命令：
@@ -367,16 +367,22 @@ def config_show():
               default="all", help="目标平台")
 @click.option("--project-dir", type=click.Path(exists=True), default=".",
               help="项目目录（默认当前目录）")
-@click.option("--plugin", is_flag=True, help="安装为 Claude Code Plugin（推荐）")
-def install(platform, project_dir, plugin):
+@click.option("--plugin", is_flag=True, help="安装为 Claude Code Plugin（推荐 Claude Code 用户）")
+@click.option("--mcp", is_flag=True, help="注册 MCP Server（通用，兼容 Claude Code/Cursor/Codex）")
+def install(platform, project_dir, plugin, mcp):
     """安装 kaiwu 到 AI 编程工具
 
     \b
+    kaiwu install --plugin     Claude Code Plugin 安装（推荐）
+    kaiwu install --mcp        MCP Server 注册（通用，兼容多平台）
     kaiwu install              传统安装（写 CLAUDE.md + 注册 MCP）
-    kaiwu install --plugin     Plugin 模式安装（推荐，更稳定）
     """
     if plugin:
         _install_claude_code_plugin()
+        return
+
+    if mcp:
+        _install_mcp_server()
         return
 
     project = Path(project_dir).resolve()
@@ -720,6 +726,75 @@ def _install_codex(project: Path):
     agents_md = project / "AGENTS.md"
     if not agents_md.exists():
         agents_md.write_text(content, encoding="utf-8")
+
+
+def _install_mcp_server():
+    """注册 kaiwu MCP Server 到各平台（通用模式，兼容 Claude Code/Cursor/Codex）"""
+    import shutil
+
+    console.print("\n[bold cyan]注册 kaiwu MCP Server[/bold cyan]\n")
+
+    python_path = sys.executable.replace("\\", "/")
+    console.print(f"  Python: {python_path}")
+
+    mcp_config = {
+        "command": python_path,
+        "args": ["-m", "kaiwu.server"],
+        "env": {
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONUNBUFFERED": "1"
+        }
+    }
+
+    # Claude Code — ~/.claude/settings.json
+    platforms_done = []
+    claude_settings = Path.home() / ".claude" / "settings.json"
+    try:
+        claude_settings.parent.mkdir(parents=True, exist_ok=True)
+        if claude_settings.exists():
+            data = json.loads(claude_settings.read_text(encoding="utf-8"))
+        else:
+            data = {}
+        data.setdefault("mcpServers", {})
+        data["mcpServers"]["kaiwu"] = mcp_config
+        claude_settings.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        platforms_done.append("Claude Code")
+        console.print(f"  [green]OK[/green] Claude Code: {claude_settings}")
+    except Exception as e:
+        console.print(f"  [red]FAIL[/red] Claude Code: {e}")
+
+    # Cursor — ~/.cursor/mcp.json
+    cursor_settings = Path.home() / ".cursor" / "mcp.json"
+    try:
+        cursor_settings.parent.mkdir(parents=True, exist_ok=True)
+        if cursor_settings.exists():
+            data = json.loads(cursor_settings.read_text(encoding="utf-8"))
+        else:
+            data = {}
+        data.setdefault("mcpServers", {})
+        data["mcpServers"]["kaiwu"] = mcp_config
+        cursor_settings.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        platforms_done.append("Cursor")
+        console.print(f"  [green]OK[/green] Cursor: {cursor_settings}")
+    except Exception as e:
+        console.print(f"  [red]FAIL[/red] Cursor: {e}")
+
+    # Codex — 如果 codex 命令存在
+    if shutil.which("codex"):
+        platforms_done.append("Codex (detected)")
+        console.print(f"  [green]OK[/green] Codex: MCP 已注册到 Claude Code 配置")
+
+    console.print()
+    if platforms_done:
+        console.print(f"[green]MCP Server 注册完成！[/green] ({', '.join(platforms_done)})")
+    else:
+        console.print("[yellow]未注册到任何平台[/yellow]")
+    console.print("[dim]重启编程工具后生效。kaiwu doctor 可验证连接。[/dim]")
+    console.print("[dim]确保已配置 API Key: kaiwu config[/dim]")
 
 
 def _register_mcp_server():

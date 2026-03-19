@@ -76,13 +76,23 @@ kaiwu config
 
 交互式向导会引导你完成配置。DeepSeek API Key 免费注册：[platform.deepseek.com](https://platform.deepseek.com)（新用户赠送 500 万 tokens，日常使用约 ¥0.1/天）。
 
-### 3. 安装插件到 Claude Code
+### 3. 接入编程工具
+
+**Claude Code 用户（推荐 Plugin 模式）：**
 
 ```bash
 kaiwu install --plugin
 ```
 
-安装完成，**重启 Claude Code** 即可使用。
+安装后重启 Claude Code，获得 6 个斜杠命令 + 3 个自动触发技能 + MCP 工具，完整体验。
+
+**Cursor / Codex / 其他 MCP 兼容工具：**
+
+```bash
+kaiwu install --mcp
+```
+
+自动注册 MCP Server 到 Claude Code、Cursor 等平台的配置文件，重启工具后生效。
 
 ---
 
@@ -201,7 +211,8 @@ KAIWU_HOME=~/.kaiwu            # 数据目录（默认）
 ### CLI 命令一览
 
 ```bash
-kaiwu install --plugin       # 安装 Claude Code 插件（推荐）
+kaiwu install --plugin       # Claude Code Plugin 安装（推荐）
+kaiwu install --mcp          # MCP Server 注册（通用，兼容多平台）
 kaiwu config                 # 交互式配置向导
 kaiwu doctor                 # 诊断连接状态
 kaiwu doctor --fix           # 诊断并自动修复
