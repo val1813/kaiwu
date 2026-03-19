@@ -783,10 +783,10 @@ def _install_mcp_server():
     except Exception as e:
         console.print(f"  [red]FAIL[/red] Cursor: {e}")
 
-    # Codex — 如果 codex 命令存在
+    # Codex — 写入 AGENTS.md 提示 MCP 可用（Codex 读取 Claude Code 的 MCP 配置）
     if shutil.which("codex"):
-        platforms_done.append("Codex (detected)")
-        console.print(f"  [green]OK[/green] Codex: MCP 已注册到 Claude Code 配置")
+        platforms_done.append("Codex")
+        console.print(f"  [green]OK[/green] Codex: 检测到 codex，共享 Claude Code MCP 配置")
 
     console.print()
     if platforms_done:
