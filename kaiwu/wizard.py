@@ -153,7 +153,7 @@ def _setup_provider():
             return
     else:
         default_url = defaults.get("base_url", "")
-        base_url = Prompt.ask("Base URL", default=default_url)
+        base_url = Prompt.ask(f"Base URL（回车默认 {default_url}）", default=default_url)
 
     # Model — 同上逻辑
     if is_custom:
@@ -163,7 +163,7 @@ def _setup_provider():
             return
     else:
         default_model = defaults.get("model", "")
-        model = Prompt.ask("模型名", default=default_model)
+        model = Prompt.ask(f"模型名（回车默认 {default_model}）", default=default_model)
 
     # API Format — 预设自动推断，自定义按 URL 猜测
     if is_custom:
