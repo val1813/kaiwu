@@ -74,7 +74,9 @@ pip install .
 kaiwu config
 ```
 
-交互式向导会引导你完成配置。DeepSeek API Key 免费注册：[platform.deepseek.com](https://platform.deepseek.com)（新用户赠送 500 万 tokens，日常使用约 ¥0.1/天）。
+交互式向导会引导你完成配置。支持 5 个预设提供商（OpenAI / Anthropic / DeepSeek / Qwen / GLM），选择后只需输入 API Key，URL 和模型名回车使用默认值。
+
+DeepSeek API Key 免费注册：[platform.deepseek.com](https://platform.deepseek.com)（新用户赠送 500 万 tokens，日常使用约 ¥0.1/天）。
 
 ### 3. 接入编程工具
 
@@ -89,10 +91,31 @@ kaiwu install --plugin
 **Cursor / Codex / 其他 MCP 兼容工具：**
 
 ```bash
+# 全平台注册（Claude Code + Cursor + Codex）
 kaiwu install --mcp
+
+# 只注册单个平台
+kaiwu install --mcp --claude-code
+kaiwu install --mcp --codex
+kaiwu install --mcp --cursor
+
+# 组合注册
+kaiwu install --mcp --claude-code --codex
 ```
 
-自动注册 MCP Server 到 Claude Code、Cursor 等平台的配置文件，重启工具后生效。
+自动注册 MCP Server 到指定平台的配置文件，重启工具后生效。
+
+**卸载：**
+
+```bash
+# 全部卸载
+kaiwu uninstall
+
+# 按平台卸载
+kaiwu uninstall --claude-code
+kaiwu uninstall --codex
+kaiwu uninstall --cursor
+```
 
 ---
 
@@ -212,7 +235,12 @@ KAIWU_HOME=~/.kaiwu            # 数据目录（默认）
 
 ```bash
 kaiwu install --plugin       # Claude Code Plugin 安装（推荐）
-kaiwu install --mcp          # MCP Server 注册（通用，兼容多平台）
+kaiwu install --mcp          # MCP Server 注册（全平台）
+kaiwu install --mcp --claude-code  # 只注册 Claude Code
+kaiwu install --mcp --codex  # 只注册 Codex
+kaiwu install --mcp --cursor # 只注册 Cursor
+kaiwu uninstall              # 全部卸载
+kaiwu uninstall --claude-code  # 按平台卸载
 kaiwu config                 # 交互式配置向导
 kaiwu doctor                 # 诊断连接状态
 kaiwu doctor --fix           # 诊断并自动修复

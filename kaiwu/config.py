@@ -167,11 +167,6 @@ def is_same_family(host_model: str, backend_model: str) -> bool:
 # ── Provider 默认值 ──────────────────────────────────────────────
 
 PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
-    "deepseek": {
-        "base_url": "https://api.deepseek.com/v1",
-        "model": "deepseek-chat",
-        "api_format": "openai",
-    },
     "openai": {
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4o",
@@ -181,6 +176,21 @@ PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
         "base_url": "https://api.anthropic.com",
         "model": "claude-sonnet-4-20250514",
         "api_format": "anthropic",
+    },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+        "api_format": "openai",
+    },
+    "qwen": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-plus",
+        "api_format": "openai",
+    },
+    "glm": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-4-flash",
+        "api_format": "openai",
     },
 }
 

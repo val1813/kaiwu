@@ -7,6 +7,10 @@
   kaiwu config        交互式配置向导
   kaiwu install --plugin  安装为 Claude Code Plugin（推荐）
   kaiwu install --mcp     注册 MCP Server（通用，兼容多平台）
+  kaiwu install --mcp --claude-code  只注册 Claude Code
+  kaiwu install --mcp --codex        只注册 Codex
+  kaiwu install --mcp --cursor       只注册 Cursor
+  kaiwu uninstall     卸载（全部或按平台）
   kaiwu stats         查看经验库/错误库统计
 
 账号命令：
@@ -369,20 +373,38 @@ def config_show():
               help="项目目录（默认当前目录）")
 @click.option("--plugin", is_flag=True, help="安装为 Claude Code Plugin（推荐 Claude Code 用户）")
 @click.option("--mcp", is_flag=True, help="注册 MCP Server（通用，兼容 Claude Code/Cursor/Codex）")
-def install(platform, project_dir, plugin, mcp):
+@click.option("--claude-code", "flag_claude_code", is_flag=True, help="只注册 Claude Code MCP")
+@click.option("--codex", "flag_codex", is_flag=True, help="只注册 Codex MCP")
+@click.option("--cursor", "flag_cursor", is_flag=True, help="只注册 Cursor MCP")
+def install(platform, project_dir, plugin, mcp, flag_claude_code, flag_codex, flag_cursor):
     """安装 kaiwu 到 AI 编程工具
 
     \b
-    kaiwu install --plugin     Claude Code Plugin 安装（推荐）
-    kaiwu install --mcp        MCP Server 注册（通用，兼容多平台）
-    kaiwu install              传统安装（写 CLAUDE.md + 注册 MCP）
+    kaiwu install --plugin                Claude Code Plugin 安装（推荐）
+    kaiwu install --mcp                   MCP Server 注册（全平台）
+    kaiwu install --mcp --claude-code     只注册 Claude Code
+    kaiwu install --mcp --codex           只注册 Codex
+    kaiwu install --mcp --cursor          只注册 Cursor
+    kaiwu install --mcp --claude-code --codex  组合注册
+    kaiwu install                         传统安装（写 CLAUDE.md + 注册 MCP）
     """
     if plugin:
         _install_claude_code_plugin()
         return
 
     if mcp:
-        _install_mcp_server()
+        # 收集目标平台
+        targets = set()
+        if flag_claude_code:
+            targets.add("claude-code")
+        if flag_codex:
+            targets.add("codex")
+        if flag_cursor:
+            targets.add("cursor")
+        # 无 flag 时注册全部（保持兼容）
+        if not targets:
+            targets = {"claude-code", "codex", "cursor"}
+        _install_mcp_server(targets)
         return
 
     project = Path(project_dir).resolve()
@@ -728,9 +750,16 @@ def _install_codex(project: Path):
         agents_md.write_text(content, encoding="utf-8")
 
 
-def _install_mcp_server():
-    """注册 kaiwu MCP Server 到各平台（通用模式，兼容 Claude Code/Cursor/Codex）"""
+def _install_mcp_server(targets: set[str] | None = None):
+    """注册 kaiwu MCP Server 到各平台（通用模式，兼容 Claude Code/Cursor/Codex）
+
+    Args:
+        targets: 目标平台集合，如 {"claude-code", "cursor", "codex"}。None 表示全部。
+    """
     import shutil
+
+    if targets is None:
+        targets = {"claude-code", "codex", "cursor"}
 
     console.print("\n[bold cyan]注册 kaiwu MCP Server[/bold cyan]\n")
 
@@ -746,117 +775,117 @@ def _install_mcp_server():
         }
     }
 
-    # Claude Code — MCP: ~/.claude.json (user scope), hooks: ~/.claude/settings.json
     platforms_done = []
 
-    # MCP Server 注册到 ~/.claude.json（claude mcp add 使用的文件）
-    claude_mcp_file = Path.home() / ".claude.json"
-    try:
-        if claude_mcp_file.exists():
-            data = json.loads(claude_mcp_file.read_text(encoding="utf-8"))
-        else:
-            data = {}
-        data.setdefault("mcpServers", {})
-        data["mcpServers"]["kaiwu"] = {
-            "type": "stdio",
-            **mcp_config,
-        }
-        claude_mcp_file.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
-        console.print(f"  [green]OK[/green] Claude Code MCP: {claude_mcp_file}")
-    except Exception as e:
-        console.print(f"  [red]FAIL[/red] Claude Code MCP: {e}")
+    # Claude Code — MCP: ~/.claude.json, hooks: ~/.claude/settings.json
+    if "claude-code" in targets:
+        claude_mcp_file = Path.home() / ".claude.json"
+        try:
+            if claude_mcp_file.exists():
+                data = json.loads(claude_mcp_file.read_text(encoding="utf-8"))
+            else:
+                data = {}
+            data.setdefault("mcpServers", {})
+            data["mcpServers"]["kaiwu"] = {
+                "type": "stdio",
+                **mcp_config,
+            }
+            claude_mcp_file.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            console.print(f"  [green]OK[/green] Claude Code MCP: {claude_mcp_file}")
+        except Exception as e:
+            console.print(f"  [red]FAIL[/red] Claude Code MCP: {e}")
 
-    # SessionStart hook 注册到 ~/.claude/settings.json
-    claude_settings = Path.home() / ".claude" / "settings.json"
-    try:
-        claude_settings.parent.mkdir(parents=True, exist_ok=True)
-        if claude_settings.exists():
-            data = json.loads(claude_settings.read_text(encoding="utf-8"))
-        else:
-            data = {}
+        # SessionStart hook 注册到 ~/.claude/settings.json
+        claude_settings = Path.home() / ".claude" / "settings.json"
+        try:
+            claude_settings.parent.mkdir(parents=True, exist_ok=True)
+            if claude_settings.exists():
+                data = json.loads(claude_settings.read_text(encoding="utf-8"))
+            else:
+                data = {}
 
-        # 注册 SessionStart hook — 让模型知道 kaiwu 已加载
-        notify_script = (
-            'import json;'
-            'print(json.dumps({"continue":True,"suppressOutput":False,'
-            '"systemMessage":"[kaiwu active] kaiwu AI coding enhancement loaded. '
-            'Tools: kaiwu_plan, kaiwu_lessons, kaiwu_record, kaiwu_context, kaiwu_condense, kaiwu_scene, kaiwu_profile. '
-            'new task->kaiwu_plan, error->kaiwu_lessons, done->kaiwu_record. '
-            'Pass host_level=strong or host_model to each call."}))'
-        )
-        hook_cmd = f'{python_path} -c "{notify_script}"'
-        kaiwu_hook = {
-            "matcher": "*",
-            "hooks": [{
-                "type": "command",
-                "command": hook_cmd,
-                "timeout": 5,
-            }],
-        }
-        data.setdefault("hooks", {})
-        data["hooks"].setdefault("SessionStart", [])
-        # 去掉旧的 kaiwu hook（如果有），再追加新的
-        data["hooks"]["SessionStart"] = [
-            h for h in data["hooks"]["SessionStart"]
-            if "kaiwu" not in h.get("hooks", [{}])[0].get("command", "")
-        ]
-        data["hooks"]["SessionStart"].append(kaiwu_hook)
+            notify_script = (
+                'import json;'
+                'print(json.dumps({"continue":True,"suppressOutput":False,'
+                '"systemMessage":"[kaiwu active] kaiwu AI coding enhancement loaded. '
+                'Tools: kaiwu_plan, kaiwu_lessons, kaiwu_record, kaiwu_context, kaiwu_condense, kaiwu_scene, kaiwu_profile. '
+                'new task->kaiwu_plan, error->kaiwu_lessons, done->kaiwu_record. '
+                'Pass host_level=strong or host_model to each call."}))'
+            )
+            hook_cmd = f'{python_path} -c "{notify_script}"'
+            kaiwu_hook = {
+                "matcher": "*",
+                "hooks": [{
+                    "type": "command",
+                    "command": hook_cmd,
+                    "timeout": 5,
+                }],
+            }
+            data.setdefault("hooks", {})
+            data["hooks"].setdefault("SessionStart", [])
+            data["hooks"]["SessionStart"] = [
+                h for h in data["hooks"]["SessionStart"]
+                if "kaiwu" not in h.get("hooks", [{}])[0].get("command", "")
+            ]
+            data["hooks"]["SessionStart"].append(kaiwu_hook)
 
-        claude_settings.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
-        platforms_done.append("Claude Code")
-        console.print(f"  [green]OK[/green] Claude Code hook: {claude_settings}")
-    except Exception as e:
-        console.print(f"  [red]FAIL[/red] Claude Code hook: {e}")
+            claude_settings.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            platforms_done.append("Claude Code")
+            console.print(f"  [green]OK[/green] Claude Code hook: {claude_settings}")
+        except Exception as e:
+            console.print(f"  [red]FAIL[/red] Claude Code hook: {e}")
 
     # Cursor — ~/.cursor/mcp.json
-    cursor_settings = Path.home() / ".cursor" / "mcp.json"
-    try:
-        cursor_settings.parent.mkdir(parents=True, exist_ok=True)
-        if cursor_settings.exists():
-            data = json.loads(cursor_settings.read_text(encoding="utf-8"))
-        else:
-            data = {}
-        data.setdefault("mcpServers", {})
-        data["mcpServers"]["kaiwu"] = mcp_config
-        cursor_settings.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
-        platforms_done.append("Cursor")
-        console.print(f"  [green]OK[/green] Cursor: {cursor_settings}")
-    except Exception as e:
-        console.print(f"  [red]FAIL[/red] Cursor: {e}")
-
-    # Codex — codex mcp add（Codex 有自己的 MCP 注册系统）
-    if shutil.which("codex"):
+    if "cursor" in targets:
+        cursor_settings = Path.home() / ".cursor" / "mcp.json"
         try:
-            import subprocess
-            codex_bin = shutil.which("codex")
-            # 先删除旧注册（忽略错误）
-            subprocess.run(
-                [codex_bin, "mcp", "remove", "kaiwu"],
-                capture_output=True, timeout=10,
-            )
-            # 注册新的
-            result = subprocess.run(
-                [
-                    codex_bin, "mcp", "add", "kaiwu",
-                    "--env", "PYTHONIOENCODING=utf-8",
-                    "--env", "PYTHONUNBUFFERED=1",
-                    "--", python_path, "-m", "kaiwu.server",
-                ],
-                capture_output=True, text=True, timeout=10,
-            )
-            if result.returncode == 0:
-                platforms_done.append("Codex")
-                console.print(f"  [green]OK[/green] Codex: codex mcp add kaiwu")
+            cursor_settings.parent.mkdir(parents=True, exist_ok=True)
+            if cursor_settings.exists():
+                data = json.loads(cursor_settings.read_text(encoding="utf-8"))
             else:
-                console.print(f"  [red]FAIL[/red] Codex: {result.stderr.strip()}")
+                data = {}
+            data.setdefault("mcpServers", {})
+            data["mcpServers"]["kaiwu"] = mcp_config
+            cursor_settings.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            platforms_done.append("Cursor")
+            console.print(f"  [green]OK[/green] Cursor: {cursor_settings}")
         except Exception as e:
-            console.print(f"  [red]FAIL[/red] Codex: {e}")
+            console.print(f"  [red]FAIL[/red] Cursor: {e}")
+
+    # Codex — codex mcp add
+    if "codex" in targets:
+        if shutil.which("codex"):
+            try:
+                import subprocess
+                codex_bin = shutil.which("codex")
+                subprocess.run(
+                    [codex_bin, "mcp", "remove", "kaiwu"],
+                    capture_output=True, timeout=10,
+                )
+                result = subprocess.run(
+                    [
+                        codex_bin, "mcp", "add", "kaiwu",
+                        "--env", "PYTHONIOENCODING=utf-8",
+                        "--env", "PYTHONUNBUFFERED=1",
+                        "--", python_path, "-m", "kaiwu.server",
+                    ],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    platforms_done.append("Codex")
+                    console.print(f"  [green]OK[/green] Codex: codex mcp add kaiwu")
+                else:
+                    console.print(f"  [red]FAIL[/red] Codex: {result.stderr.strip()}")
+            except Exception as e:
+                console.print(f"  [red]FAIL[/red] Codex: {e}")
+        else:
+            console.print(f"  [yellow]SKIP[/yellow] Codex: codex 命令未找到")
 
     console.print()
     if platforms_done:
@@ -906,6 +935,146 @@ def _add_mcp_to_settings(settings_path: Path, platform: str):
         console.print(f"  [green]OK[/green] MCP Server 已注册到 {settings_path}")
     except Exception as e:
         console.print(f"  [yellow]WARN[/yellow] MCP 注册失败 ({platform}): {e}")
+
+
+@main.command()
+@click.option("--claude-code", "flag_claude_code", is_flag=True, help="只卸载 Claude Code")
+@click.option("--codex", "flag_codex", is_flag=True, help="只卸载 Codex")
+@click.option("--cursor", "flag_cursor", is_flag=True, help="只卸载 Cursor")
+def uninstall(flag_claude_code, flag_codex, flag_cursor):
+    """卸载 kaiwu MCP 注册
+
+    \b
+    kaiwu uninstall                全部卸载
+    kaiwu uninstall --claude-code  只卸载 Claude Code
+    kaiwu uninstall --codex        只卸载 Codex
+    kaiwu uninstall --cursor       只卸载 Cursor
+    """
+    import shutil
+
+    # 收集目标平台
+    targets = set()
+    if flag_claude_code:
+        targets.add("claude-code")
+    if flag_codex:
+        targets.add("codex")
+    if flag_cursor:
+        targets.add("cursor")
+    # 无 flag 时全部卸载
+    if not targets:
+        targets = {"claude-code", "codex", "cursor"}
+
+    console.print("\n[bold cyan]卸载 kaiwu MCP Server[/bold cyan]\n")
+    platforms_done = []
+
+    # Claude Code — 删 ~/.claude.json 中 mcpServers.kaiwu + ~/.claude/settings.json 中 hooks
+    if "claude-code" in targets:
+        # 1) 删 MCP 注册
+        claude_mcp_file = Path.home() / ".claude.json"
+        try:
+            if claude_mcp_file.exists():
+                data = json.loads(claude_mcp_file.read_text(encoding="utf-8"))
+                servers = data.get("mcpServers", {})
+                if "kaiwu" in servers:
+                    del servers["kaiwu"]
+                    claude_mcp_file.write_text(
+                        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+                    )
+                    console.print(f"  [green]OK[/green] 已删除 Claude Code MCP: {claude_mcp_file}")
+                else:
+                    console.print(f"  [dim]SKIP[/dim] Claude Code MCP 未注册")
+            else:
+                console.print(f"  [dim]SKIP[/dim] {claude_mcp_file} 不存在")
+        except Exception as e:
+            console.print(f"  [red]FAIL[/red] Claude Code MCP: {e}")
+
+        # 2) 删 hooks
+        claude_settings = Path.home() / ".claude" / "settings.json"
+        try:
+            if claude_settings.exists():
+                data = json.loads(claude_settings.read_text(encoding="utf-8"))
+                hooks = data.get("hooks", {})
+                changed = False
+
+                # 删 SessionStart 中的 kaiwu hook
+                if "SessionStart" in hooks:
+                    before = len(hooks["SessionStart"])
+                    hooks["SessionStart"] = [
+                        h for h in hooks["SessionStart"]
+                        if "kaiwu" not in h.get("hooks", [{}])[0].get("command", "")
+                    ]
+                    if len(hooks["SessionStart"]) < before:
+                        changed = True
+                    if not hooks["SessionStart"]:
+                        del hooks["SessionStart"]
+
+                # 删 settings.json 中旧的 mcpServers.kaiwu（如果存在）
+                servers = data.get("mcpServers", {})
+                if "kaiwu" in servers:
+                    del servers["kaiwu"]
+                    changed = True
+
+                if changed:
+                    claude_settings.write_text(
+                        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+                    )
+                    console.print(f"  [green]OK[/green] 已清理 Claude Code hooks: {claude_settings}")
+                else:
+                    console.print(f"  [dim]SKIP[/dim] Claude Code hooks 无 kaiwu 配置")
+        except Exception as e:
+            console.print(f"  [red]FAIL[/red] Claude Code hooks: {e}")
+
+        platforms_done.append("Claude Code")
+
+    # Cursor — 删 ~/.cursor/mcp.json 中 mcpServers.kaiwu
+    if "cursor" in targets:
+        cursor_settings = Path.home() / ".cursor" / "mcp.json"
+        try:
+            if cursor_settings.exists():
+                data = json.loads(cursor_settings.read_text(encoding="utf-8"))
+                servers = data.get("mcpServers", {})
+                if "kaiwu" in servers:
+                    del servers["kaiwu"]
+                    cursor_settings.write_text(
+                        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+                    )
+                    console.print(f"  [green]OK[/green] 已删除 Cursor MCP: {cursor_settings}")
+                else:
+                    console.print(f"  [dim]SKIP[/dim] Cursor MCP 未注册")
+            else:
+                console.print(f"  [dim]SKIP[/dim] {cursor_settings} 不存在")
+        except Exception as e:
+            console.print(f"  [red]FAIL[/red] Cursor: {e}")
+
+        platforms_done.append("Cursor")
+
+    # Codex — codex mcp remove kaiwu
+    if "codex" in targets:
+        codex_bin = shutil.which("codex")
+        if codex_bin:
+            try:
+                import subprocess
+                result = subprocess.run(
+                    [codex_bin, "mcp", "remove", "kaiwu"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    console.print(f"  [green]OK[/green] 已删除 Codex MCP")
+                else:
+                    console.print(f"  [yellow]WARN[/yellow] Codex: {result.stderr.strip()}")
+            except Exception as e:
+                console.print(f"  [red]FAIL[/red] Codex: {e}")
+        else:
+            console.print(f"  [dim]SKIP[/dim] codex 命令未找到")
+
+        platforms_done.append("Codex")
+
+    console.print()
+    if platforms_done:
+        console.print(f"[green]卸载完成！[/green] ({', '.join(platforms_done)})")
+    else:
+        console.print("[yellow]未卸载任何平台[/yellow]")
+    console.print("[dim]重启编程工具后生效。[/dim]")
 
 
 @main.command()

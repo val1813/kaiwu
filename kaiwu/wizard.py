@@ -35,10 +35,12 @@ console = Console()
 # ── Provider 预设 ──────────────────────────────────────────────────
 
 _PROVIDER_CHOICES = {
-    "1": ("deepseek", "DeepSeek"),
-    "2": ("openai", "OpenAI"),
-    "3": ("claude", "Claude (Anthropic)"),
-    "4": ("custom", "自定义中转"),
+    "1": ("openai", "OpenAI"),
+    "2": ("claude", "Anthropic (Claude)"),
+    "3": ("deepseek", "DeepSeek"),
+    "4": ("qwen", "Qwen (通义千问)"),
+    "5": ("glm", "GLM (智谱)"),
+    "6": ("custom", "自定义中转"),
 }
 
 _FORMAT_CHOICES = {
@@ -130,10 +132,11 @@ def _setup_provider():
         console.print(f"  {num}. {display}")
     console.print()
 
-    choice = Prompt.ask("请选择", choices=list(_PROVIDER_CHOICES.keys()), default="1")
+    choice = Prompt.ask("请选择", choices=list(_PROVIDER_CHOICES.keys()), default="3")
     provider_id, provider_name = _PROVIDER_CHOICES[choice]
 
     defaults = PROVIDER_DEFAULTS.get(provider_id, {})
+    is_custom = provider_id == "custom"
 
     # API Key
     console.print()
@@ -142,43 +145,39 @@ def _setup_provider():
         console.print("[yellow]未输入 API Key，已取消[/yellow]")
         return
 
-    # Base URL
-    default_url = defaults.get("base_url", "")
-    if provider_id == "custom":
+    # Base URL — 官方预设显示默认值，回车跳过；自定义必填
+    if is_custom:
         base_url = Prompt.ask("Base URL")
+        if not base_url.strip():
+            console.print("[yellow]未输入 Base URL，已取消[/yellow]")
+            return
     else:
+        default_url = defaults.get("base_url", "")
         base_url = Prompt.ask("Base URL", default=default_url)
 
-    # Model
-    default_model = defaults.get("model", "")
-    if provider_id == "custom":
+    # Model — 同上逻辑
+    if is_custom:
         model = Prompt.ask("模型名")
+        if not model.strip():
+            console.print("[yellow]未输入模型名，已取消[/yellow]")
+            return
     else:
+        default_model = defaults.get("model", "")
         model = Prompt.ask("模型名", default=default_model)
 
-    # API Format — 先按 URL 关键词预判，再可选探测
-    url_guess = _detect_format_by_url(base_url)
-    console.print(f"\n[dim]URL 关键词预判格式: {url_guess}[/dim]")
-
-    # 对自定义中转和非标准 URL，建议探测
-    if provider_id == "custom" or url_guess == "openai":
-        if Confirm.ask("是否自动探测 API 格式?（推荐，耗时 ~5s）", default=True):
-            console.print("[dim]正在探测...[/dim]")
-            probed, reason = _probe_api_format(api_key, base_url, model)
-            if probed != "unknown":
-                console.print(f"[green]探测结果: {probed}[/green] ({reason})")
-                url_guess = probed
-            else:
-                console.print(f"[yellow]探测未确定: {reason}，使用 URL 预判[/yellow]")
-
-    console.print("[bold]API 格式：[/bold]")
-    for num, (_, desc) in _FORMAT_CHOICES.items():
-        marker = " (检测)" if _FORMAT_CHOICES[num][0] == url_guess else ""
-        console.print(f"  {num}. {desc}{marker}")
-
-    default_fmt = "1" if url_guess == "openai" else "2"
-    fmt_choice = Prompt.ask("请选择", choices=list(_FORMAT_CHOICES.keys()), default=default_fmt)
-    api_format = _FORMAT_CHOICES[fmt_choice][0]
+    # API Format — 预设自动推断，自定义按 URL 猜测
+    if is_custom:
+        api_format = _detect_format_by_url(base_url)
+        console.print(f"\n[dim]自动推断 API 格式: {api_format}[/dim]")
+        console.print("[bold]API 格式：[/bold]")
+        for num, (_, desc) in _FORMAT_CHOICES.items():
+            marker = " (推断)" if _FORMAT_CHOICES[num][0] == api_format else ""
+            console.print(f"  {num}. {desc}{marker}")
+        default_fmt = "1" if api_format == "openai" else "2"
+        fmt_choice = Prompt.ask("请选择", choices=list(_FORMAT_CHOICES.keys()), default=default_fmt)
+        api_format = _FORMAT_CHOICES[fmt_choice][0]
+    else:
+        api_format = defaults.get("api_format", "openai")
 
     # 可选: 测试连接
     console.print()
