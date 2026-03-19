@@ -830,10 +830,33 @@ def _install_mcp_server():
     except Exception as e:
         console.print(f"  [red]FAIL[/red] Cursor: {e}")
 
-    # Codex — 写入 AGENTS.md 提示 MCP 可用（Codex 读取 Claude Code 的 MCP 配置）
+    # Codex — codex mcp add（Codex 有自己的 MCP 注册系统）
     if shutil.which("codex"):
-        platforms_done.append("Codex")
-        console.print(f"  [green]OK[/green] Codex: 检测到 codex，共享 Claude Code MCP 配置")
+        try:
+            import subprocess
+            codex_bin = shutil.which("codex")
+            # 先删除旧注册（忽略错误）
+            subprocess.run(
+                [codex_bin, "mcp", "remove", "kaiwu"],
+                capture_output=True, timeout=10,
+            )
+            # 注册新的
+            result = subprocess.run(
+                [
+                    codex_bin, "mcp", "add", "kaiwu",
+                    "--env", "PYTHONIOENCODING=utf-8",
+                    "--env", "PYTHONUNBUFFERED=1",
+                    "--", python_path, "-m", "kaiwu.server",
+                ],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                platforms_done.append("Codex")
+                console.print(f"  [green]OK[/green] Codex: codex mcp add kaiwu")
+            else:
+                console.print(f"  [red]FAIL[/red] Codex: {result.stderr.strip()}")
+        except Exception as e:
+            console.print(f"  [red]FAIL[/red] Codex: {e}")
 
     console.print()
     if platforms_done:
