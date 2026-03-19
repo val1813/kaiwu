@@ -746,8 +746,29 @@ def _install_mcp_server():
         }
     }
 
-    # Claude Code — ~/.claude/settings.json
+    # Claude Code — MCP: ~/.claude.json (user scope), hooks: ~/.claude/settings.json
     platforms_done = []
+
+    # MCP Server 注册到 ~/.claude.json（claude mcp add 使用的文件）
+    claude_mcp_file = Path.home() / ".claude.json"
+    try:
+        if claude_mcp_file.exists():
+            data = json.loads(claude_mcp_file.read_text(encoding="utf-8"))
+        else:
+            data = {}
+        data.setdefault("mcpServers", {})
+        data["mcpServers"]["kaiwu"] = {
+            "type": "stdio",
+            **mcp_config,
+        }
+        claude_mcp_file.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        console.print(f"  [green]OK[/green] Claude Code MCP: {claude_mcp_file}")
+    except Exception as e:
+        console.print(f"  [red]FAIL[/red] Claude Code MCP: {e}")
+
+    # SessionStart hook 注册到 ~/.claude/settings.json
     claude_settings = Path.home() / ".claude" / "settings.json"
     try:
         claude_settings.parent.mkdir(parents=True, exist_ok=True)
@@ -755,11 +776,8 @@ def _install_mcp_server():
             data = json.loads(claude_settings.read_text(encoding="utf-8"))
         else:
             data = {}
-        data.setdefault("mcpServers", {})
-        data["mcpServers"]["kaiwu"] = mcp_config
 
         # 注册 SessionStart hook — 让模型知道 kaiwu 已加载
-        # 用 python -c 内联脚本，不依赖 kaiwu 包版本（避免 site-packages 旧版无 notify.py）
         notify_script = (
             'import json;'
             'print(json.dumps({"continue":True,"suppressOutput":False,'
@@ -790,10 +808,9 @@ def _install_mcp_server():
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
         )
         platforms_done.append("Claude Code")
-        console.print(f"  [green]OK[/green] Claude Code: {claude_settings}")
-        console.print(f"  [green]OK[/green] SessionStart hook: 模型启动时将收到 kaiwu 通知")
+        console.print(f"  [green]OK[/green] Claude Code hook: {claude_settings}")
     except Exception as e:
-        console.print(f"  [red]FAIL[/red] Claude Code: {e}")
+        console.print(f"  [red]FAIL[/red] Claude Code hook: {e}")
 
     # Cursor — ~/.cursor/mcp.json
     cursor_settings = Path.home() / ".cursor" / "mcp.json"
