@@ -10,9 +10,6 @@ import sys
 
 
 def main():
-    # 用户可见提示（stderr 显示在终端）
-    print("⚡ kaiwu AI coding enhancement is active", file=sys.stderr)
-
     # 模型可见提示（systemMessage 注入到模型上下文）
     msg = (
         "[kaiwu plugin active] "
