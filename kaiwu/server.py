@@ -22,6 +22,7 @@ logger.add(str(LOG_PATH), rotation="5 MB", retention="3 days", level="DEBUG", en
 # 创建 MCP Server
 mcp = FastMCP(
     "cl-kaiwu",
+    version="0.2.0",
     instructions=(
         "你好，我是开物(kaiwu)，你的 AI Coding 增强搭档。"
         "我在后台默默工作，内嵌 DeepSeek 引擎，为你提供：\n"
