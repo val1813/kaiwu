@@ -86,11 +86,16 @@ _DISTILL_SYSTEM = """\
 _AUDIT_SYSTEM = """\
 你是编程方法论分析师。分析 AI 编程助手的执行轨迹，提炼可复用的方法论模式。
 
+轨迹可能来自强模型（Opus/GPT-4o）或弱模型，你需要识别两类模式：
+A. 最佳实践：强模型的高效路线，值得其他模型学习
+B. 犯错教训：任何模型踩过的坑，后续应避免
+
 # 输出格式
 严格返回 JSON：
 {
   "pivot_turn": 5,
   "pivot_description": "从直接修改配置改为先读取再增量修改",
+  "pattern_type": "best_practice 或 pitfall",
   "pattern": {
     "situation": "需要修改已有配置文件时",
     "good_approach": "先读取现有内容，理解结构，再做增量修改",
@@ -106,8 +111,9 @@ _AUDIT_SYSTEM = """\
 3. reason: 为什么（一句话），不超过50字
 4. 只提炼方法论，不写具体代码/路径/值/版本号
 5. confidence: 0.5-1.0，越通用越高
-6. 轨迹太简单无明显转折 → {"pivot_turn": null, "pattern": null, "confidence": 0}
-7. 只输出 JSON，不要 markdown 代码块
+6. pattern_type: best_practice（成功路线值得学习）或 pitfall（犯错模式需要避免）
+7. 全部成功且无转折的短轨迹 → {"pivot_turn": null, "pattern": null, "confidence": 0}
+8. 只输出 JSON，不要 markdown 代码块
 """
 
 
@@ -119,31 +125,55 @@ def _should_audit(
     trace_steps: list,
     host_level: str,
 ) -> bool:
-    """选择性审计 — 只审计有故事的轨迹"""
+    """选择性审计 — 只审计有价值的轨迹
+
+    设计原则：
+    - strong 模型的轨迹更有价值（最佳实践 + 犯错模式都值得记录）
+    - 所有模型的失败和转折都值得审计
+    - 太短太简单的轨迹跳过，省 token
+    """
     if not trace_steps:
         return False
-    if len(trace_steps) < 4:
+    if len(trace_steps) < 3:
         return False
+
+    failed_steps = sum(1 for s in trace_steps if not s.success)
+    has_pivot = any(s.pivot for s in trace_steps)
+
+    # ── strong 模型：积极学习（他的路线是最佳实践，他的错误是高价值教训）──
+    if host_level == "strong":
+        # 失败 → 必须记录（强模型的犯错模式极有价值，如 write 超长）
+        if not success:
+            return True
+        # 有失败步骤 → 记录（强模型踩过的坑，弱模型更容易踩）
+        if failed_steps >= 1:
+            return True
+        # 有 pivot → 记录（强模型主动换方向，说明原路线有问题）
+        if has_pivot:
+            return True
+        # 长任务成功 → 记录（强模型的完整路线就是教科书）
+        if success and turns >= 5:
+            return True
+        # 短任务全部成功 → 跳过（太简单，没什么可学的）
+        return False
+
+    # ── medium/weak 模型 ──
     # 失败 + 步骤多 → 分析哪里走错了
     if not success and turns >= 5:
         return True
     # 成功但经历过失败步骤 → 有转折点
-    failed_steps = sum(1 for s in trace_steps if not s.success)
     if success and failed_steps >= 2:
         return True
     # 主 AI 自标了 pivot → 一定审计
-    if any(s.pivot for s in trace_steps):
+    if has_pivot:
         return True
-    # strong 模型不需要方法论帮助
-    if host_level == "strong":
-        return False
     # 长任务成功 → 可能有值得提炼的经验
     if success and turns >= 6:
         return True
     return False
 
 
-def _audit_trace(task, task_type, trace_steps, success, turns):
+def _audit_trace(task, task_type, trace_steps, success, turns, host_level=""):
     """调用 DeepSeek 分析轨迹，提取方法论模式
 
     Returns:
@@ -156,8 +186,11 @@ def _audit_trace(task, task_type, trace_steps, success, turns):
         return None
 
     # 构建 user prompt
+    level_hint = ""
+    if host_level == "strong":
+        level_hint = "（来自强模型 Opus/GPT-4o 级别，其成功路线是最佳实践，其犯错是高价值教训）"
     lines = [f"# 任务\n{task[:300]}"]
-    lines.append(f"# 结果: {'成功' if success else '失败'}, {turns} 轮")
+    lines.append(f"# 结果: {'成功' if success else '失败'}, {turns} 轮 {level_hint}")
     lines.append("# 执行轨迹")
     for s in trace_steps[:20]:
         marker = "OK" if s.success else "FAIL"
@@ -230,11 +263,11 @@ def _store_pattern(pattern_dict, task_type, turns, success, project_name):
     logger.info(f"方法论模式已存入: {pattern_dict['situation'][:50]}")
 
 
-def audit_async(task, task_type, trace_steps, success, turns, project_name):
+def audit_async(task, task_type, trace_steps, success, turns, project_name, host_level=""):
     """后台线程执行轨迹审计"""
     def worker():
         try:
-            result = _audit_trace(task, task_type, trace_steps, success, turns)
+            result = _audit_trace(task, task_type, trace_steps, success, turns, host_level)
             if result and result.get("pattern"):
                 _store_pattern(result["pattern"], task_type, turns, success, project_name)
         except Exception as e:
@@ -335,7 +368,7 @@ def record_outcome(
 
         # 轨迹审计
         if trace_steps and _should_audit(success, turns, trace_steps, host_level):
-            audit_async(task, task_type, trace_steps, success, turns, project_name)
+            audit_async(task, task_type, trace_steps, success, turns, project_name, host_level)
             result += "; 轨迹审计已启动"
 
         return {"message": result, "exp_id": exp_id}
