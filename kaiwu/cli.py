@@ -1050,7 +1050,10 @@ def uninstall(flag_claude_code, flag_codex, flag_cursor):
                     [codex_bin, "mcp", "remove", "kaiwu"],
                     capture_output=True, text=True, timeout=10,
                 )
-                if result.returncode == 0:
+                output = (result.stdout + result.stderr).lower()
+                if "not found" in output or "no mcp" in output:
+                    console.print(f"  [dim]SKIP[/dim] Codex MCP 未注册")
+                elif result.returncode == 0:
                     console.print(f"  [green]OK[/green] 已删除 Codex MCP")
                 else:
                     console.print(f"  [yellow]WARN[/yellow] Codex: {result.stderr.strip()}")
