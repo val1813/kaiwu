@@ -47,7 +47,7 @@ _is_legacy_windows = (
 console = Console(legacy_windows=False) if _is_legacy_windows else Console()
 
 # ── 版本常量 ──
-CURRENT_VERSION = "0.2.0"
+CURRENT_VERSION = "0.2.2"
 GITHUB_REPO = "val1813/kaiwu"
 UPDATE_CHECK_CACHE = KAIWU_HOME / ".update_check.json"
 UPDATE_CHECK_INTERVAL = 86400  # 24 小时

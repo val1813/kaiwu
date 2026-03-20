@@ -78,7 +78,7 @@ def test_build_event_chain():
         {"event_type": "fix"},
         {"event_type": "success"},
     ]
-    assert build_event_chain(events) == "error→fix→error→fix→success"
+    assert build_event_chain(events) == "error->fix->error->fix->success"
     assert build_event_chain([]) == ""
     assert build_event_chain([{"event_type": "success"}]) == "success"
 

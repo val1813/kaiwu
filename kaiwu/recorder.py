@@ -240,11 +240,48 @@ def _audit_trace(task, task_type, trace_steps, success, turns, host_level=""):
         return None
 
 
-def _store_pattern(pattern_dict, task_type, turns, success, project_name):
+def _is_universal_pattern(pattern_dict: dict, confidence: float) -> bool:
+    """判断方法论是否为通用模式（不含项目特定词）
+
+    高置信度 + 无项目特定词 → universal，存入时 project_name="" 使所有项目可见。
+    """
+    if confidence < 0.85:
+        return False
+
+    situation = pattern_dict.get("situation", "").lower()
+    good = pattern_dict.get("good_approach", "").lower()
+    bad = pattern_dict.get("bad_approach", "").lower()
+    all_text = f"{situation} {good} {bad}"
+
+    _project_specific = {
+        # 具体文件名/格式
+        ".vue", ".tsx", ".jsx", "package.json", "requirements.txt",
+        "docker-compose", "nginx.conf", "webpack",
+        # 具体框架
+        "fastapi", "django", "flask", "express", "nextjs", "nuxt",
+        # 具体数据库
+        "mysql", "postgresql", "mongodb", "sqlite",
+    }
+
+    if any(kw in all_text for kw in _project_specific):
+        return False
+
+    return True
+
+
+def _store_pattern(pattern_dict, task_type, turns, success, project_name, confidence: float = 0.7):
     """将方法论模式存入经验库"""
     from kaiwu.storage.experience import MEMORY_TAG_METHOD
 
     exp_store = get_experience_store()
+
+    # 判断是否为通用方法论：universal 时清空 project_name，所有项目可见
+    if _is_universal_pattern(pattern_dict, confidence):
+        actual_project = ""
+        logger.info(f"方法论标记为 universal (confidence={confidence}): {pattern_dict['situation'][:50]}")
+    else:
+        actual_project = project_name
+
     # situation 可能很短，拼接 good_approach 确保超过 15 字符的最低长度
     task_desc = f"[方法论] {pattern_dict['situation']}→{pattern_dict['good_approach']}"
     exp_store.record(
@@ -259,7 +296,7 @@ def _store_pattern(pattern_dict, task_type, turns, success, project_name):
         ],
         turns=turns,
         memory_tag=MEMORY_TAG_METHOD,
-        project_name=project_name,
+        project_name=actual_project,
     )
     logger.info(f"方法论模式已存入: {pattern_dict['situation'][:50]}")
 
@@ -270,7 +307,8 @@ def audit_async(task, task_type, trace_steps, success, turns, project_name, host
         try:
             result = _audit_trace(task, task_type, trace_steps, success, turns, host_level)
             if result and result.get("pattern"):
-                _store_pattern(result["pattern"], task_type, turns, success, project_name)
+                _store_pattern(result["pattern"], task_type, turns, success, project_name,
+                               confidence=result.get("confidence", 0.7))
         except Exception as e:
             logger.debug(f"异步审计失败: {e}")
 

@@ -10,8 +10,10 @@ v0.2 三项升级（借鉴 mem0 理念，编程场景专用实现）：
 
 import hashlib
 import json
+import math
 import re
 import time
+from collections import Counter
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
@@ -392,6 +394,15 @@ class ExperienceStore:
         self._data: dict[str, Experience] = {}
         self._load()
         self._merge_preset()
+        self._tfidf = _TfIdfIndex()
+        self._build_tfidf_index()
+
+    def _build_tfidf_index(self):
+        """从现有数据构建 TF-IDF 索引"""
+        for exp_id, exp in self._data.items():
+            if not exp.deprecated:
+                text = f"{exp.task_description} {exp.effective_summary} {' '.join(exp.key_steps or [])}"
+                self._tfidf.add(exp_id, text)
 
     def _load(self):
         """加载经验库"""
@@ -568,6 +579,7 @@ class ExperienceStore:
         if exp_id in self._data:
             self._data[exp_id].deprecated = True
             self._data[exp_id].deprecated_at = time.time()
+            self._tfidf.remove(exp_id)
             self._save()
             return True
         return False
@@ -684,6 +696,8 @@ class ExperienceStore:
         self._data[exp_id] = exp
         self._trim()
         self._save()
+        text = f"{exp.task_description} {exp.effective_summary} {' '.join(exp.key_steps or [])}"
+        self._tfidf.add(exp.exp_id, text)
         logger.info(f"记录{'成功' if success else '失败'}经验: {exp_id} [{memory_tag}]")
         return exp
 
@@ -766,6 +780,15 @@ class ExperienceStore:
                 candidates.append((score, exp))
 
         candidates.sort(key=lambda x: x[0], reverse=True)
+
+        # TF-IDF 精排（如果候选数 > top_k，用 TF-IDF 重排）
+        if len(candidates) > top_k:
+            tfidf_scores = dict(self._tfidf.query(task, top_k=len(candidates)))
+            candidates = [
+                (score * 0.6 + tfidf_scores.get(exp.exp_id, 0) * 10 * 0.4, exp)
+                for score, exp in candidates
+            ]
+            candidates.sort(key=lambda x: x[0], reverse=True)
 
         results = []
         for _, exp in candidates[:top_k]:
@@ -910,3 +933,70 @@ class ExperienceStore:
         )
         for eid, _ in sorted_exps[:len(self._data) - MAX_EXPERIENCES]:
             del self._data[eid]
+
+
+# ── 轻量 TF-IDF 向量化（零外部依赖）──────────────────────────────
+
+class _TfIdfIndex:
+    """轻量 TF-IDF 索引，纯 Python 实现，用于经验检索精排"""
+
+    def __init__(self):
+        self._docs: dict[str, Counter] = {}  # exp_id -> term_freq
+        self._idf: dict[str, float] = {}
+        self._dirty = True
+
+    def add(self, doc_id: str, text: str):
+        """添加文档"""
+        tokens = _extract_keywords(text)
+        self._docs[doc_id] = Counter(tokens)
+        self._dirty = True
+
+    def remove(self, doc_id: str):
+        """移除文档"""
+        self._docs.pop(doc_id, None)
+        self._dirty = True
+
+    def _rebuild_idf(self):
+        """重建 IDF"""
+        if not self._dirty:
+            return
+        n = len(self._docs)
+        if n == 0:
+            self._idf = {}
+            self._dirty = False
+            return
+
+        df: Counter = Counter()
+        for tf in self._docs.values():
+            for term in tf:
+                df[term] += 1
+
+        self._idf = {term: math.log(n / count) for term, count in df.items()}
+        self._dirty = False
+
+    def query(self, text: str, top_k: int = 5) -> list[tuple[str, float]]:
+        """查询最相似的文档，返回 [(doc_id, score), ...]"""
+        self._rebuild_idf()
+
+        query_tokens = Counter(_extract_keywords(text))
+        if not query_tokens:
+            return []
+
+        # query TF-IDF 向量
+        q_vec = {t: tf * self._idf.get(t, 0) for t, tf in query_tokens.items()}
+        q_norm = math.sqrt(sum(v * v for v in q_vec.values()))
+        if q_norm == 0:
+            return []
+
+        scores = []
+        for doc_id, doc_tf in self._docs.items():
+            dot = sum(q_vec.get(t, 0) * tf * self._idf.get(t, 0) for t, tf in doc_tf.items())
+            d_norm = math.sqrt(sum((tf * self._idf.get(t, 0)) ** 2 for t, tf in doc_tf.items()))
+            if d_norm == 0:
+                continue
+            cosine = dot / (q_norm * d_norm)
+            if cosine > 0.1:  # 最低阈值
+                scores.append((doc_id, cosine))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+        return scores[:top_k]

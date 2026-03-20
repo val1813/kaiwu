@@ -11,6 +11,7 @@ from kaiwu.storage.error_kb import (
     _fingerprint,
     _extract_error_key,
     _fuzzy_match,
+    _categorize_error,
 )
 
 
@@ -236,6 +237,71 @@ def test_get_stats(kb):
     assert stats["total"] == 2
     assert stats["solved"] == 1
     assert stats["unsolved"] == 1
+
+
+# ── category ──────────────────────────────────────────────────────
+
+def test_categorize_encoding():
+    assert _categorize_error("UnicodeDecodeError: 'gbk' codec can't decode") == "encoding"
+
+
+def test_categorize_import():
+    assert _categorize_error("ModuleNotFoundError: No module named 'requests'") == "import"
+
+
+def test_categorize_file_not_found():
+    assert _categorize_error("FileNotFoundError: No such file or directory") == "file_not_found"
+
+
+def test_categorize_network():
+    assert _categorize_error("ConnectionRefusedError: [Errno 111] Connection refused") == "network"
+
+
+def test_categorize_other():
+    assert _categorize_error("some completely unknown weird error zzz") == "other"
+
+
+def test_record_error_stores_category(kb):
+    fp = kb.record_error("UnicodeDecodeError: 'utf-8' codec can't decode byte")
+    entry = kb._data["entries"][fp]
+    assert entry["category"] == "encoding"
+
+
+def test_find_solution_category_match(kb):
+    # 记录一个 encoding 错误并给出解法
+    err1 = "UnicodeDecodeError: 'gbk' codec can't decode byte 0xff"
+    fp1 = kb.record_error(err1)
+    kb.record_solution(fp1, "open(file, encoding='utf-8')")
+
+    # 查询另一个 encoding 错误（指纹和模糊都不会命中）
+    err2 = "UnicodeEncodeError: charmap codec can't encode character"
+    result = kb.find_solution(err2)
+    assert result is not None
+    assert result["source"] == "local_category"
+    assert result["confidence"] == 0.5
+    assert result["category"] == "encoding"
+    assert "utf-8" in result["solution"]
+
+
+def test_find_solution_category_no_solution_returns_none(kb):
+    # 同类别有记录但无解法，不应返回
+    err1 = "UnicodeDecodeError: 'gbk' codec can't decode byte 0xff"
+    kb.record_error(err1)  # 不记录 solution
+
+    err2 = "UnicodeEncodeError: charmap codec can't encode character"
+    result = kb.find_solution(err2)
+    assert result is None
+
+
+def test_get_stats_category_distribution(kb):
+    kb.record_error("UnicodeDecodeError: 'utf-8' codec can't decode")
+    kb.record_error("ModuleNotFoundError: No module named 'PIL'")
+    kb.record_error("ModuleNotFoundError: No module named 'numpy'")
+
+    stats = kb.get_stats()
+    dist = stats["category_distribution"]
+    assert dist.get("encoding", 0) >= 1
+    assert dist.get("import", 0) >= 2
 
 
 if __name__ == "__main__":

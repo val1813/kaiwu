@@ -26,6 +26,7 @@ from kaiwu.storage.experience import (
     _keyword_overlap,
     _sanitize_assertion,
     _make_exp_id,
+    _TfIdfIndex,
 )
 
 

@@ -19,6 +19,33 @@ from kaiwu.config import ERROR_KB_PATH, DATA_DIR
 
 MAX_ENTRIES = 200
 
+# 错误类别映射（零 token，纯规则）
+_ERROR_CATEGORIES = {
+    "encoding": ["encoding", "codec", "gbk", "utf", "unicode", "decode", "encode", "charmap", "cp936"],
+    "import": ["import", "module", "no module", "cannot find module", "modulenotfounderror"],
+    "permission": ["permission", "denied", "eacces", "readonly", "access"],
+    "network": ["timeout", "connection", "refused", "econnrefused", "dns", "ssl", "certificate"],
+    "file_not_found": ["no such file", "filenotfounderror", "enoent", "not found", "does not exist"],
+    "type_error": ["typeerror", "cannot read property", "undefined is not", "null reference"],
+    "syntax": ["syntaxerror", "unexpected token", "parsing error", "invalid syntax"],
+    "dependency": ["version", "conflict", "incompatible", "requires", "dependency"],
+    "memory": ["out of memory", "memoryerror", "heap", "stack overflow", "segfault"],
+    "port": ["address already in use", "eaddrinuse", "port", "bind"],
+}
+
+
+def _categorize_error(error_text: str) -> str:
+    """将错误归类到预定义类别（零 token）"""
+    text_lower = error_text.lower()
+    best_cat = ""
+    best_hits = 0
+    for cat, keywords in _ERROR_CATEGORIES.items():
+        hits = sum(1 for kw in keywords if kw in text_lower)
+        if hits > best_hits:
+            best_hits = hits
+            best_cat = cat
+    return best_cat if best_hits >= 1 else "other"
+
 
 def _fingerprint(error_text: str) -> str:
     """提取错误指纹：去掉路径、数字等变量部分，保留错误模式"""
@@ -187,6 +214,7 @@ class ErrorKB:
         })
         entry["count"] = entry.get("count", 0) + 1
         entry["last_seen"] = time.strftime("%Y-%m-%d %H:%M")
+        entry["category"] = _categorize_error(error_text)
         self._data["entries"][fp] = entry
         self._trim()
         self._save()
@@ -240,16 +268,49 @@ class ErrorKB:
                 "confidence": 0.7,
             }
 
+        # 第三层：同类别最佳方案
+        category = _categorize_error(error_text)
+        if category != "other":
+            cat_match = self._find_category_solution(category)
+            if cat_match:
+                return {
+                    "source": "local_category",
+                    "key": cat_match["key"],
+                    "solution": cat_match["solution"],
+                    "confidence": 0.5,
+                    "category": category,
+                }
+
         return None
+
+    def _find_category_solution(self, category: str) -> Optional[dict]:
+        """在同类别的已解决错误中找最佳方案"""
+        candidates = []
+        for entry in self._data["entries"].values():
+            if not entry.get("solution"):
+                continue
+            if entry.get("category") == category:
+                candidates.append(entry)
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda e: e.get("count", 0), reverse=True)
+        return candidates[0]
 
     def get_stats(self) -> dict:
         """获取知识库统计"""
         entries = self._data["entries"]
         solved = sum(1 for e in entries.values() if e.get("solution"))
+        cat_dist = {}
+        for e in entries.values():
+            cat = e.get("category", "other")
+            cat_dist[cat] = cat_dist.get(cat, 0) + 1
         return {
             "total": len(entries),
             "solved": solved,
             "unsolved": len(entries) - solved,
+            "category_distribution": cat_dist,
         }
 
     def get_all_entries(self) -> list[dict]:
