@@ -161,6 +161,15 @@ def _lightweight_plan(task: str, context: str, session_id: str,
                 except Exception as e:
                     logger.debug(f"写入 injected_exp_ids 失败: {e}")
 
+    # ── 注入用户记忆 ──────────────────────────────────────────────
+    try:
+        from kaiwu.memory import inject_memory_context
+        memory_ctx = inject_memory_context(task, project_name=project_name)
+        if memory_ctx:
+            result["user_memory"] = memory_ctx
+    except Exception as e:
+        logger.debug(f"注入用户记忆失败: {e}")
+
     # ── 会话上下文（有就给） ─────────────────────────────────────
     if session_id:
         try:

@@ -168,6 +168,15 @@ def get_plan(task: str, context: str = "", session_id: str = "",
     if experience_context:
         user_parts.append(f"\n# 历史经验\n\n{experience_context}")
 
+    # ── 加载用户记忆 ───────────────────────────────────────────
+    try:
+        from kaiwu.memory import inject_memory_context
+        memory_ctx = inject_memory_context(task, project_name=project_name)
+        if memory_ctx:
+            user_parts.append(f"\n# 用户记忆\n\n{memory_ctx}")
+    except Exception as e:
+        logger.debug(f"加载用户记忆失败: {e}")
+
     user_message = "\n".join(user_parts)
 
     # ── 调用 LLM ──────────────────────────────────────────────

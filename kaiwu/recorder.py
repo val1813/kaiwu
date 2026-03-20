@@ -450,6 +450,14 @@ def record_outcome(
             except Exception as e:
                 logger.debug(f"记录决策锚点失败: {e}")
 
+        # 成功时：触发异步记忆提取（门控：>3轮的任务才值得提取，短任务没什么可记的）
+        if success and task.strip() and turns > 3:
+            try:
+                from kaiwu.memory import trigger_memory_extraction
+                trigger_memory_extraction(task, project_name)
+            except Exception as e:
+                logger.debug(f"触发记忆提取失败（静默）: {e}")
+
         # 记录错误到 Session 的 error_history（用于循环检测）
         if session_id and not success and error_summary.strip():
             try:

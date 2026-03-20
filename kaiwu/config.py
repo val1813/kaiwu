@@ -27,6 +27,7 @@ LOG_PATH = KAIWU_HOME / "kaiwu.log"
 ERROR_KB_PATH = KAIWU_HOME / "error_kb.json"
 EXPERIENCE_PATH = KAIWU_HOME / "experiences.json"
 PROFILE_PATH = KAIWU_HOME / "profile.json"
+MEMORY_PATH = KAIWU_HOME / "memory.json"
 ENRICHMENTS_PATH = KAIWU_HOME / "scene_enrichments.json"
 SESSIONS_DIR = KAIWU_HOME / "sessions"
 
