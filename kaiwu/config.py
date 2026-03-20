@@ -59,13 +59,10 @@ NOISE_DIRS: frozenset[str] = frozenset({
     "eggs", ".eggs", "logs", "tmp", "temp",
 })
 
-# ── 计划（v1.0 全部免费，后续版本区分权益） ──────────────────────
+# ── 计划 ──────────────────────────────────────────────────────────
 
 PLAN_FREE = "free"          # 免费版（v1.0 默认，功能完整）
 PLAN_BYOK = "byok"          # 自带 DeepSeek Key
-PLAN_PERSONAL = "personal"  # 预留
-PLAN_PRO = "pro"            # 预留
-PLAN_TEAM = "team"          # 预留
 
 # ── 默认配置 ─────────────────────────────────────────────────────
 
@@ -194,11 +191,6 @@ PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
         "api_format": "openai",
     },
 }
-
-# ── 限额（v1.0 不启用，预留） ─────────────────────────────────────
-
-TRIAL_DAILY_LIMIT = 30  # v1.0 未使用，预留给后续版本
-
 
 class Config:
     """配置管理器，读取 ~/.kaiwu/config.toml"""

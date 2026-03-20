@@ -68,9 +68,6 @@ def kaiwu_plan(task: str, context: str = "", session_id: str = "",
             f"host_level={level}, model={host_model}"
         )
 
-        # LEAN：知识库不注入，但经验/诊断正常（纯算法/SQL 等）
-        # [v0.3 已移除 LEAN 等级，统一走 NORMAL，知识库由白名单控制]
-
         # 强模型 or 同系列 → 轻量规划（但 RESCUE 例外）
         cfg = get_config()
         same_family = host_model and is_same_family(host_model, cfg.llm_model)
