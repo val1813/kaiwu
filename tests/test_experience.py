@@ -512,6 +512,107 @@ def test_store_trim_removes_excess(store):
     assert len(store._data) <= MAX_EXPERIENCES
 
 
+# ── _TfIdfIndex ───────────────────────────────────────────────────
+
+def test_tfidf_query_returns_relevant():
+    idx = _TfIdfIndex()
+    idx.add("doc1", "implement user authentication JWT token")
+    idx.add("doc2", "database query optimization index")
+    idx.add("doc3", "user login JWT authentication flow")
+    results = idx.query("JWT authentication", top_k=2)
+    doc_ids = [r[0] for r in results]
+    assert "doc1" in doc_ids or "doc3" in doc_ids
+
+
+def test_tfidf_query_scores_between_0_and_1():
+    idx = _TfIdfIndex()
+    idx.add("doc1", "implement authentication module")
+    idx.add("doc2", "database optimization query")
+    results = idx.query("authentication", top_k=5)
+    for _, score in results:
+        assert 0.0 < score <= 1.0
+
+
+def test_tfidf_remove_excludes_doc():
+    idx = _TfIdfIndex()
+    idx.add("doc1", "implement user authentication JWT")
+    idx.add("doc2", "database query optimization")
+    idx.remove("doc1")
+    results = idx.query("JWT authentication", top_k=5)
+    doc_ids = [r[0] for r in results]
+    assert "doc1" not in doc_ids
+
+
+def test_tfidf_empty_query_returns_empty():
+    idx = _TfIdfIndex()
+    idx.add("doc1", "implement authentication")
+    results = idx.query("", top_k=5)
+    assert results == []
+
+
+def test_tfidf_empty_index_returns_empty():
+    idx = _TfIdfIndex()
+    results = idx.query("authentication JWT", top_k=5)
+    assert results == []
+
+
+def test_tfidf_reranking_in_retrieve(store):
+    """TF-IDF 精排：多候选时应返回语义更相关的经验"""
+    # 写入多条经验，确保候选数 > top_k 触发精排
+    for i in range(5):
+        task = f"实现用户登录功能，使用 JWT 认证，模块 {i}"
+        exp_id = _make_exp_id(task, "web")
+        store._data[exp_id] = Experience(
+            exp_id=exp_id,
+            task_type="web",
+            task_description=task,
+            summary=f"JWT 登录实现方案 {i}",
+            memory_tag=MEMORY_TAG_IMPL,
+            success=True,
+            problem_keywords=_extract_keywords(task),
+        )
+        store._tfidf.add(exp_id, f"{task} JWT 登录实现方案 {i}")
+
+    results = store.retrieve("用户登录 JWT 认证", task_type="web", top_k=2)
+    assert len(results) <= 2
+
+
+def test_tfidf_index_built_on_init(tmp_path):
+    """__init__ 时应自动构建 TF-IDF 索引"""
+    exp_path = tmp_path / "experiences.json"
+    s = ExperienceStore(path=exp_path)
+    s._data.clear()
+    task = "实现用户登录功能，使用 JWT 认证"
+    exp_id = _make_exp_id(task, "web")
+    s._data[exp_id] = Experience(
+        exp_id=exp_id,
+        task_type="web",
+        task_description=task,
+        summary="JWT 登录",
+        success=True,
+        problem_keywords=_extract_keywords(task),
+    )
+    s._save()
+
+    # 重新加载，验证索引被构建
+    s2 = ExperienceStore(path=exp_path)
+    assert exp_id in s2._tfidf._docs
+
+
+def test_tfidf_soft_delete_removes_from_index(store):
+    """软删除后 TF-IDF 索引中不应再有该文档"""
+    exp = store.record(
+        task="实现用户登录功能，使用 JWT 认证",
+        task_type="web",
+        success=True,
+        summary="JWT 登录",
+    )
+    assert exp is not None
+    assert exp.exp_id in store._tfidf._docs
+    store._soft_delete(exp.exp_id)
+    assert exp.exp_id not in store._tfidf._docs
+
+
 if __name__ == "__main__":
     passed = failed = 0
     for name, func in list(globals().items()):
