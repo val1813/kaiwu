@@ -12,12 +12,8 @@ import sys
 def main():
     # 模型可见提示（systemMessage 注入到模型上下文）
     msg = (
-        "[kaiwu plugin active] "
-        "kaiwu AI coding enhancement is loaded. Available MCP tools: "
-        "kaiwu_context, kaiwu_plan, kaiwu_lessons, kaiwu_record, kaiwu_condense, kaiwu_scene, kaiwu_profile. "
-        "Workflow: new task -> kaiwu_plan, error -> kaiwu_lessons, done -> kaiwu_record. "
-        "Always pass host_level=\"strong\" (or host_model for auto-detect). "
-        "Slash commands: /kaiwu-plan, /kaiwu-lessons, /kaiwu-record, /kaiwu-scene, /kaiwu-doctor, /kaiwu-stats."
+        "🛠️ 开物(kaiwu)顾问在线！"
+        "遇事不决调 kaiwu_plan，报错别慌调 kaiwu_lessons，完事记一笔 kaiwu_record。"
     )
 
     print(json.dumps({

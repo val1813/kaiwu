@@ -15,11 +15,8 @@ def main():
 
     # 模型可见提示（systemMessage 注入到模型上下文）
     msg = (
-        "[kaiwu active] "
-        "kaiwu AI coding enhancement is loaded via MCP. Available tools: "
-        "kaiwu_plan, kaiwu_lessons, kaiwu_record, kaiwu_context, kaiwu_condense, kaiwu_scene, kaiwu_profile. "
-        "Workflow: new task -> kaiwu_plan, error -> kaiwu_lessons, done -> kaiwu_record. "
-        "Pass host_level=\"strong\" (or host_model for auto-detect) to each tool call."
+        "🛠️ 开物(kaiwu)顾问在线！"
+        "遇事不决调 kaiwu_plan，报错别慌调 kaiwu_lessons，完事记一笔 kaiwu_record。"
     )
 
     # stdout 输出纯 JSON（hooks 协议要求）

@@ -390,13 +390,17 @@ def _write_claude_code_env(api_key: str, base_url: str = ""):
 
 def _setenv_win(name: str, value: str):
     """通过 PowerShell 设置 Windows 用户级环境变量（持久化到注册表）"""
-    # 设置持久化环境变量
-    ps_cmd = (
-        f'[Environment]::SetEnvironmentVariable("{name}", "{value}", '
+    import base64
+    # 用 -EncodedCommand 避免引号注入
+    ps_script = (
+        f'[Environment]::SetEnvironmentVariable("{name}", '
+        f'[System.Text.Encoding]::UTF8.GetString('
+        f'[Convert]::FromBase64String("{base64.b64encode(value.encode("utf-8")).decode()}")), '
         f'[EnvironmentVariableTarget]::User)'
     )
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode()
     subprocess.run(
-        ["powershell", "-NoProfile", "-Command", ps_cmd],
+        ["powershell", "-NoProfile", "-EncodedCommand", encoded],
         capture_output=True, timeout=10,
     )
 

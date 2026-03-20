@@ -10,6 +10,7 @@ Session 是开物"模型同权"的核心数据结构：
 """
 
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -24,6 +25,20 @@ from kaiwu.config import (
     CONDENSE_KEEP_RECENT,
     MAX_INJECT_TOKENS,
 )
+
+# ── session_id 校验 ──────────────────────────────────────────────────
+_SESSION_ID_RE = re.compile(r"^sess_\d{8}_[a-f0-9]{6}$")
+
+# ── 列表上限 ─────────────────────────────────────────────────────────
+MAX_ANCHORS = 30
+MAX_COMPRESSED_HISTORY = 20
+MAX_SUBTASKS = 50
+MAX_CHECKPOINTS = 50
+
+
+def _validate_session_id(session_id: str) -> bool:
+    """校验 session_id 格式，防止路径穿越"""
+    return bool(_SESSION_ID_RE.match(session_id))
 
 # ── 数据模型 ────────────────────────────────────────────────────────
 
@@ -157,23 +172,30 @@ class SessionManager:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
     def _path(self, session_id: str) -> Path:
+        if not _validate_session_id(session_id):
+            raise ValueError(f"非法 session_id: {session_id!r}")
         return SESSIONS_DIR / f"{session_id}.json"
 
     def _lock_path(self, session_id: str) -> Path:
+        if not _validate_session_id(session_id):
+            raise ValueError(f"非法 session_id: {session_id!r}")
         return SESSIONS_DIR / f"{session_id}.lock"
 
     def _save(self, session: Session):
         session.updated_at = time.time()
-        try:
-            from filelock import FileLock
-            lock = FileLock(str(self._lock_path(session.session_id)), timeout=5)
-            with lock:
-                self._path(session.session_id).write_text(
-                    json.dumps(_session_to_dict(session), ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-        except ImportError:
-            # filelock not installed, write without lock
+        # 列表上限裁剪
+        if len(session.anchors) > MAX_ANCHORS:
+            session.anchors = session.anchors[-MAX_ANCHORS:]
+        if len(session.compressed_history) > MAX_COMPRESSED_HISTORY:
+            session.compressed_history = session.compressed_history[-MAX_COMPRESSED_HISTORY:]
+        if len(session.subtasks) > MAX_SUBTASKS:
+            session.subtasks = session.subtasks[-MAX_SUBTASKS:]
+        if len(session.checkpoints) > MAX_CHECKPOINTS:
+            session.checkpoints = session.checkpoints[-MAX_CHECKPOINTS:]
+
+        from filelock import FileLock
+        lock = FileLock(str(self._lock_path(session.session_id)), timeout=5)
+        with lock:
             self._path(session.session_id).write_text(
                 json.dumps(_session_to_dict(session), ensure_ascii=False, indent=2),
                 encoding="utf-8",

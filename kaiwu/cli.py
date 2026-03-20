@@ -13,18 +13,6 @@
   kaiwu uninstall     卸载（全部或按平台）
   kaiwu stats         查看经验库/错误库统计
 
-账号命令：
-  kaiwu register      注册云端账号
-  kaiwu login         登录
-  kaiwu logout        登出
-  kaiwu verify-email  验证邮箱
-  kaiwu forgot-password  发送密码重置码
-  kaiwu reset-password   重置密码
-
-云端同步：
-  kaiwu sync          同步云端库
-  kaiwu contribute    上传经验到社区
-
 """
 
 import json
@@ -47,7 +35,7 @@ _is_legacy_windows = (
 console = Console(legacy_windows=False) if _is_legacy_windows else Console()
 
 # ── 版本常量 ──
-CURRENT_VERSION = "0.2.2"
+from kaiwu import __version__ as CURRENT_VERSION
 GITHUB_REPO = "val1813/kaiwu"
 UPDATE_CHECK_CACHE = KAIWU_HOME / ".update_check.json"
 UPDATE_CHECK_INTERVAL = 86400  # 24 小时
@@ -438,15 +426,17 @@ def config_show():
     if CONFIG_PATH.exists():
         content = CONFIG_PATH.read_text(encoding="utf-8")
         console.print(f"[dim]配置文件: {CONFIG_PATH}[/dim]\n")
-        # 隐藏 API Key
+        # 隐藏 API Key（匹配所有含 api_key 的行，不限前缀）
         for line in content.split("\n"):
-            if "api_key" in line and "sk-" in line:
-                parts = line.split("=")
-                if len(parts) == 2:
-                    key_val = parts[1].strip().strip('"')
-                    masked = key_val[:6] + "..." + key_val[-4:] if len(key_val) > 10 else "***"
-                    console.print(f"{parts[0]}= \"{masked}\"")
-                    continue
+            if "api_key" in line.lower() and "=" in line:
+                parts = line.split("=", 1)
+                key_val = parts[1].strip().strip('"').strip("'")
+                if len(key_val) > 10:
+                    masked = key_val[:6] + "..." + key_val[-4:]
+                else:
+                    masked = "***"
+                console.print(f"{parts[0]}= \"{masked}\"")
+                continue
             console.print(line)
     else:
         console.print(f"[yellow]配置文件不存在: {CONFIG_PATH}[/yellow]")
@@ -1530,157 +1520,53 @@ def launch(extra_args):
 
 @main.command()
 def contribute():
-    """上传本地优质经验贡献社区"""
-    from kaiwu.storage.sync import CloudSync, CloudSyncError
-    from kaiwu.storage.experience import ExperienceStore
-
-    client = CloudSync()
-    if not client.is_logged_in:
-        console.print("[yellow]请先登录: kaiwu login[/yellow]")
-        return
-
-    # 读取本地经验库，筛选成功的
-    store = ExperienceStore()
-    all_exps = [e for e in store._data.values() if e.success and e.fix_strategy]
-
-    if not all_exps:
-        console.print("[yellow]本地暂无可贡献的经验（需要先用 kaiwu 完成一些任务）[/yellow]")
-        return
-
-    console.print(f"本地共 {len(all_exps)} 条成功经验，开始上传...")
-    uploaded = 0
-    for exp in all_exps:
-        try:
-            ok = client.contribute({
-                "task_type": exp.task_type,
-                "task_description": exp.task_description[:500],
-                "summary": exp.fix_strategy[:300],
-                "key_steps": exp.key_steps[:10],
-            })
-            if ok:
-                uploaded += 1
-        except CloudSyncError:
-            pass
-
-    console.print(f"[green]已上传 {uploaded} 条经验到社区库，感谢贡献！[/green]")
+    """上传本地优质经验贡献社区（云端功能即将上线）"""
+    console.print("[yellow]云端社区功能即将上线，敬请期待。[/yellow]")
+    console.print("[dim]当前所有经验数据安全存储在本地 ~/.kaiwu/[/dim]")
 
 
 @main.command()
-@click.argument("username")
-@click.argument("password")
-@click.option("--email", "-e", default="", help="注册邮箱（用于密码重置）")
-def register(username: str, password: str, email: str):
-    """注册云端账号: kaiwu register <用户名> <密码> [-e 邮箱]"""
-    from kaiwu.storage.sync import CloudSync, CloudSyncError
-    try:
-        client = CloudSync()
-        result = client.register(username, password, email=email)
-        console.print(f"[green]注册成功！[/green] 用户: {result['username']}")
-        console.print(f"Token 已缓存，后续自动同步无需重复登录。")
-        if email:
-            console.print(f"[dim]验证码已发送到 {email}，请查收并执行：kaiwu verify-email {email} <验证码>[/dim]")
-    except CloudSyncError as e:
-        console.print(f"[red]注册失败: {e}[/red]")
+def register():
+    """注册云端账号（即将上线）"""
+    console.print("[yellow]云端账号功能即将上线，敬请期待。[/yellow]")
+    console.print("[dim]当前版本所有功能均可离线使用。[/dim]")
 
 
 @main.command()
-@click.argument("username")
-@click.argument("password")
-def login(username: str, password: str):
-    """登录云端: kaiwu login <用户名> <密码>"""
-    from kaiwu.storage.sync import CloudSync, CloudSyncError
-    try:
-        client = CloudSync()
-        result = client.login(username, password)
-        console.print(f"[green]登录成功！[/green] 用户: {result['username']} (plan={result.get('plan')})")
-    except CloudSyncError as e:
-        console.print(f"[red]登录失败: {e}[/red]")
+def login():
+    """登录云端（即将上线）"""
+    console.print("[yellow]云端登录功能即将上线，敬请期待。[/yellow]")
 
 
 @main.command("verify-email")
-@click.argument("email")
-@click.argument("code")
-def verify_email(email: str, code: str):
-    """验证邮箱: kaiwu verify-email <邮箱> <验证码>"""
-    from kaiwu.storage.sync import CloudSync, CloudSyncError
-    try:
-        client = CloudSync()
-        client.verify_email(email, code)
-        console.print(f"[green]邮箱验证成功！[/green]")
-    except CloudSyncError as e:
-        console.print(f"[red]验证失败: {e}[/red]")
+def verify_email():
+    """验证邮箱（即将上线）"""
+    console.print("[yellow]云端功能即将上线，敬请期待。[/yellow]")
 
 
 @main.command("forgot-password")
-@click.argument("email")
-def forgot_password(email: str):
-    """发送密码重置码: kaiwu forgot-password <邮箱>"""
-    from kaiwu.storage.sync import CloudSync, CloudSyncError
-    try:
-        client = CloudSync()
-        client.forgot_password(email)
-        console.print(f"[green]重置码已发送到 {email}，请查收邮件。[/green]")
-        console.print(f"[dim]然后执行：kaiwu reset-password {email} <验证码> <新密码>[/dim]")
-    except CloudSyncError as e:
-        console.print(f"[red]发送失败: {e}[/red]")
+def forgot_password():
+    """发送密码重置码（即将上线）"""
+    console.print("[yellow]云端功能即将上线，敬请期待。[/yellow]")
 
 
 @main.command("reset-password")
-@click.argument("email")
-@click.argument("code")
-@click.argument("new_password")
-def reset_password(email: str, code: str, new_password: str):
-    """重置密码: kaiwu reset-password <邮箱> <验证码> <新密码>"""
-    from kaiwu.storage.sync import CloudSync, CloudSyncError
-    try:
-        client = CloudSync()
-        client.reset_password(email, code, new_password)
-        console.print(f"[green]密码已重置！请重新登录：kaiwu login <用户名> <新密码>[/green]")
-    except CloudSyncError as e:
-        console.print(f"[red]重置失败: {e}[/red]")
+def reset_password():
+    """重置密码（即将上线）"""
+    console.print("[yellow]云端功能即将上线，敬请期待。[/yellow]")
 
 
 @main.command()
 def sync():
-    """从云端同步最新库数据"""
-    from kaiwu.storage.sync import CloudSync, CloudSyncError
-    client = CloudSync()
-    if not client.is_logged_in:
-        console.print("[yellow]请先登录: kaiwu login <用户名> <密码>[/yellow]")
-        return
-    try:
-        result = client.sync_all()
-        updated = result.get("updated", {})
-        if updated:
-            for lib_name in updated:
-                console.print(f"  [green]+[/green] {lib_name} -> v{updated[lib_name]['version']}")
-            console.print(f"[green]同步完成，已更新 {len(updated)} 个库[/green]")
-        else:
-            console.print("[dim]所有库已是最新版本[/dim]")
-    except CloudSyncError as e:
-        console.print(f"[red]同步失败: {e}[/red]")
+    """从云端同步最新库数据（即将上线）"""
+    console.print("[yellow]云端同步功能即将上线，敬请期待。[/yellow]")
+    console.print("[dim]当前所有数据安全存储在本地 ~/.kaiwu/[/dim]")
 
 
 @main.command()
 def logout():
-    """登出云端账号"""
-    from kaiwu.storage.sync import CloudSync, CloudSyncError, TOKEN_PATH
-
-    client = CloudSync()
-    if not client.is_logged_in:
-        console.print("[dim]当前未登录[/dim]")
-        return
-
-    # 通知服务端清除 token
-    try:
-        client.logout()
-    except CloudSyncError:
-        pass  # 服务端不可达也要清本地
-
-    # 清除本地缓存
-    if TOKEN_PATH.exists():
-        TOKEN_PATH.unlink()
-    console.print("[green]已登出[/green]")
+    """登出云端账号（即将上线）"""
+    console.print("[yellow]云端功能即将上线，敬请期待。[/yellow]")
 
 
 if __name__ == "__main__":

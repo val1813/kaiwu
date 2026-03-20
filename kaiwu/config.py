@@ -399,13 +399,21 @@ class Config:
 def _toml_value(v: Any) -> str:
     """将 Python 值转为 TOML 格式字符串"""
     if isinstance(v, str):
-        return f'"{v}"'
+        # 转义反斜杠和双引号
+        escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
     elif isinstance(v, bool):
         return "true" if v else "false"
     elif isinstance(v, (int, float)):
         return str(v)
+    elif isinstance(v, list):
+        items = ", ".join(_toml_value(item) for item in v)
+        return f"[{items}]"
+    elif v is None:
+        return '""'
     else:
-        return f'"{v}"'
+        escaped = str(v).replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
 
 
 # 全局单例

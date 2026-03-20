@@ -19,6 +19,20 @@ from kaiwu.task_classifier import classify_task, should_inject_knowledge, TaskVe
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 logger.add(str(LOG_PATH), rotation="5 MB", retention="3 days", level="DEBUG", encoding="utf-8")
 
+# ── 输入校验常量 ──────────────────────────────────────────────────────
+MAX_TASK_LEN = 2000          # task 描述最大字符数
+MAX_ERROR_TEXT_LEN = 8000    # error_text 最大字符数
+MAX_CONTEXT_LEN = 50000      # context / directory_tree 最大字符数
+MAX_HISTORY_LEN = 100000     # history JSON 最大字符数
+MAX_TRACE_LEN = 50000        # trace JSON 最大字符数
+
+
+def _clamp(text: str, max_len: int) -> str:
+    """截断过长输入，避免打爆内存和 LLM token"""
+    if len(text) > max_len:
+        return text[:max_len] + f"...[截断，原长 {len(text)}]"
+    return text
+
 # 创建 MCP Server
 mcp = FastMCP(
     "cl-kaiwu",
@@ -59,6 +73,9 @@ def kaiwu_plan(task: str, context: str = "", session_id: str = "",
         error_count: 累计错误数
     """
     try:
+        task = _clamp(task, MAX_TASK_LEN)
+        context = _clamp(context, MAX_CONTEXT_LEN)
+
         # ── 第一关：任务分类器（零 token） ────────────────────────
         verdict = classify_task(task, turns=turns, error_count=error_count)
         level = infer_host_level(host_level, host_model)
@@ -295,6 +312,10 @@ def kaiwu_lessons(error_text: str, context: str = "", session_id: str = "",
         turns: 当前轮数
     """
     try:
+        error_text = _clamp(error_text, MAX_ERROR_TEXT_LEN)
+        context = _clamp(context, MAX_CONTEXT_LEN)
+        task = _clamp(task, MAX_TASK_LEN)
+
         level = infer_host_level(host_level, host_model)
 
         # 强模型：纯本地匹配
@@ -399,6 +420,10 @@ def kaiwu_record(
         trace: 执行轨迹JSON数组（可选）。每项: {"turn": 1, "action": "读取文件", "outcome": "发现bug", "success": true, "pivot": false}
     """
     try:
+        task = _clamp(task, MAX_TASK_LEN)
+        error_summary = _clamp(error_summary, MAX_ERROR_TEXT_LEN)
+        trace = _clamp(trace, MAX_TRACE_LEN)
+
         from kaiwu.recorder import record_outcome
 
         # 解析 anchors
@@ -530,6 +555,9 @@ def kaiwu_condense(
         host_model: 主AI模型名
     """
     try:
+        task_goal = _clamp(task_goal, MAX_TASK_LEN)
+        history = _clamp(history, MAX_HISTORY_LEN)
+
         from kaiwu.session import SessionManager
         from kaiwu.condenser import condense_history, should_condense, extract_key_facts
 
@@ -619,6 +647,10 @@ def kaiwu_context(
         host_model: 主AI模型名
     """
     try:
+        directory_tree = _clamp(directory_tree, MAX_CONTEXT_LEN)
+        task = _clamp(task, MAX_TASK_LEN)
+        key_files = _clamp(key_files, MAX_CONTEXT_LEN)
+
         from kaiwu.context import process_context
         result = process_context(
             directory_tree=directory_tree,
@@ -646,9 +678,8 @@ def kaiwu_scene(task: str,
         host_model: 主AI模型名
     """
     try:
+        task = _clamp(task, MAX_TASK_LEN)
         level = infer_host_level(host_level, host_model)
-
-        # 强模型 或 同系列模型：纯关键词匹配，不浪费 LLM
         cfg = get_config()
         skip_llm = (level == "strong" or
                     (host_model and is_same_family(host_model, cfg.llm_model)))
