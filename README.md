@@ -164,6 +164,12 @@ CPU-only inference is supported but not the focus.
 
 ## Changelog
 
+### v0.3.2 — VRAM detection fix + MoE partial guard + RTX PRO support
+- Fixed VRAM over-reporting on Windows: Resizable BAR / shared GPU memory caused nvidia-smi to report inflated VRAM (e.g. 4070 showing 31GB instead of 12GB). Now cross-checks XML vs CSV values and caps to known GPU VRAM limits
+- Fixed MoE partial mode OOM on small-VRAM cards: when model size > 1.2× total VRAM, forces `moe_offload` (all experts on CPU) instead of attempting `moe_partial` which would OOM
+- Added RTX PRO series (Blackwell professional) to bandwidth fallback table: PRO 6000/5000/4500/4000/2000 — fixes bandwidth=0 causing suboptimal tuning
+- Added `knownMaxVRAM()` lookup table covering all consumer/professional/datacenter NVIDIA GPUs
+
 ### v0.3.1 — MoE OOM root cause fix (--fit conflicts with --cpu-moe)
 - `--fit on` cannot be combined with `--cpu-moe`/`--n-cpu-moe`（ik_llama.cpp docs）. Previous versions passed both, causing --fit to override MoE layer placement → OOM. Now only `full_gpu` uses `--fit on`; MoE modes use `-ngl 999` + explicit offload flags
 - `calcMoEMode` overhead: 1GB → 2.5GB (reserves KV cache + compute buffer space)
@@ -432,6 +438,12 @@ kaiwu inject
 
 ### v0.2.3 — 修复 Blackwell 启动超时被误判为 OOM
 - RTX 50 系启动超时（90s）不够 PTX JIT 编译（~60s），超时错误被 `isLikelyOOM()` 捕获 → ctx 减半重试循环 → 三次全失败。Blackwell 现在 180s 超时，错误信息与 OOM 区分开
+
+### v0.3.2 — VRAM 检测修复 + MoE partial 保护 + RTX PRO 支持
+- 修复 Windows 下 VRAM 虚高：Resizable BAR / 共享 GPU 内存导致 nvidia-smi 报告虚假 VRAM（如 4070 显示 31GB 而非 12GB）。现在 XML 与 CSV 交叉校验，并用已知 GPU VRAM 上限表兜底
+- 修复小显存卡 MoE partial 模式 OOM：当模型大小 > 1.2× 总 VRAM 时，强制走 `moe_offload`（全部 expert 放 CPU），不再尝试 `moe_partial`
+- 新增 RTX PRO 系列（Blackwell 专业卡）带宽枚举：PRO 6000/5000/4500/4000/2000——修复带宽=0 导致调参不准
+- 新增 `knownMaxVRAM()` 查找表，覆盖所有消费级/专业/数据中心 NVIDIA GPU
 
 ### v0.3.1 — MoE OOM 根因修复（--fit 与 --cpu-moe 冲突）
 - `--fit on` 不能和 `--cpu-moe`/`--n-cpu-moe` 同时使用（ik_llama.cpp 文档明确说明）。之前所有版本都同时传了两个，`--fit` 覆盖了 MoE 层分配 → OOM。现在只有 `full_gpu` 用 `--fit on`，MoE 模式用 `-ngl 999` + 显式 offload 参数

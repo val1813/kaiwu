@@ -316,6 +316,14 @@ func calcMoEMode(profile *DeployProfile, hw *hardware.HardwareProbe) (string, in
 
 	vramMB := hw.TotalVRAM_MB()
 
+	// Guard: if model is significantly larger than total VRAM, don't attempt moe_partial.
+	// moe_partial requires attention layers + overhead + some experts to fit in VRAM.
+	// If model_size > 1.2x VRAM, the attention layers alone likely won't fit.
+	modelMB := int(profile.Size_GB * 1024)
+	if modelMB > vramMB*120/100 {
+		return "moe_offload", 0
+	}
+
 	// Attention layers ≈ 25% of model size
 	attentionMB := int(profile.Size_GB * 1024 * 0.25)
 	// Reserve for KV cache (at least 8K ctx) + compute buffer + activations

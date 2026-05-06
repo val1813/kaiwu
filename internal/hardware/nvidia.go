@@ -65,6 +65,31 @@ func detectNVIDIA() ([]GPUInfo, error) {
 			}
 		}
 
+		// Sanity check: Windows Resizable BAR can cause nvidia-smi XML to report
+		// shared GPU memory (system RAM mapped to GPU) as fb_memory_usage.total,
+		// inflating VRAM far beyond the card's actual dedicated memory.
+		// Cross-check with CSV query and known GPU VRAM limits.
+		name := strings.TrimSpace(g.ProductName)
+		if vramTotal > 0 {
+			// Prefer CSV value if XML is suspiciously larger (>20% over CSV)
+			if i < len(csvVRAM) && csvVRAM[i] > 0 && vramTotal > csvVRAM[i]*120/100 {
+				vramTotal = csvVRAM[i]
+				vramFree = vramTotal - vramUsed
+				if vramFree < 0 {
+					vramFree = 0
+				}
+			}
+			// Final guard: cap to known max VRAM for the GPU model
+			if maxVRAM := knownMaxVRAM(name); maxVRAM > 0 && vramTotal > maxVRAM {
+				fmt.Printf("      ⚠  GPU %d (%s): reported %d MB VRAM, capping to known max %d MB\n", i, name, vramTotal, maxVRAM)
+				vramTotal = maxVRAM
+				vramFree = vramTotal - vramUsed
+				if vramFree < 0 {
+					vramFree = 0
+				}
+			}
+		}
+
 		cc := ""
 		if i < len(computeCaps) {
 			cc = computeCaps[i]
@@ -74,13 +99,13 @@ func detectNVIDIA() ([]GPUInfo, error) {
 
 		gpus = append(gpus, GPUInfo{
 			Index:            i,
-			Name:             strings.TrimSpace(g.ProductName),
+			Name:             name,
 			VRAM_MB:          vramTotal,
 			VRAMUsed_MB:      vramUsed,
 			VRAMFree_MB:      vramFree,
 			ComputeCap:       cc,
 			CUDADriver:       smiLog.CUDAVersion,
-			MemBandwidth_GBs: calcBandwidth(g, strings.TrimSpace(g.ProductName)),
+			MemBandwidth_GBs: calcBandwidth(g, name),
 			IsBlackwell:      isBlackwell,
 		})
 	}
@@ -279,6 +304,17 @@ func estimateBandwidth(name string) float64 {
 		return 256.0
 	case strings.Contains(n, "1060"):
 		return 192.0
+	// RTX PRO series (Blackwell professional)
+	case strings.Contains(n, "rtx pro 6000"):
+		return 1152.0
+	case strings.Contains(n, "rtx pro 5000"):
+		return 672.0
+	case strings.Contains(n, "rtx pro 4500"):
+		return 576.0
+	case strings.Contains(n, "rtx pro 4000"):
+		return 384.0
+	case strings.Contains(n, "rtx pro 2000"):
+		return 288.0
 	// Data center
 	case strings.Contains(n, "a100"):
 		return 2039.0
@@ -294,5 +330,127 @@ func estimateBandwidth(name string) float64 {
 		return 900.0
 	default:
 		return 0.0
+	}
+}
+
+// knownMaxVRAM returns the known dedicated VRAM (MiB) for a GPU model.
+// Used to detect and correct inflated VRAM reports caused by Windows Resizable BAR
+// or shared GPU memory being included in nvidia-smi fb_memory_usage.
+// Returns 0 if the GPU is not in the table (no cap applied).
+func knownMaxVRAM(name string) int {
+	n := strings.ToLower(name)
+	switch {
+	// RTX 50 series (Blackwell)
+	case strings.Contains(n, "5090"):
+		return 32768
+	case strings.Contains(n, "5080"):
+		return 16384
+	case strings.Contains(n, "5070 ti"):
+		return 16384
+	case strings.Contains(n, "5070"):
+		return 12288
+	case strings.Contains(n, "5060 ti"):
+		return 16384
+	case strings.Contains(n, "5060"):
+		return 8192
+	// RTX 40 series (Ada)
+	case strings.Contains(n, "4090"):
+		return 24576
+	case strings.Contains(n, "4080 super"):
+		return 16384
+	case strings.Contains(n, "4080"):
+		return 16384
+	case strings.Contains(n, "4070 ti super"):
+		return 16384
+	case strings.Contains(n, "4070 ti"):
+		return 12288
+	case strings.Contains(n, "4070 super"):
+		return 12288
+	case strings.Contains(n, "4070"):
+		return 12288
+	case strings.Contains(n, "4060 ti"):
+		return 16384 // 16GB variant exists
+	case strings.Contains(n, "4060"):
+		return 8192
+	// RTX 30 series (Ampere)
+	case strings.Contains(n, "3090 ti"):
+		return 24576
+	case strings.Contains(n, "3090"):
+		return 24576
+	case strings.Contains(n, "3080 ti"):
+		return 16384 // laptop variant has 16GB, desktop has 12GB — use higher to avoid false cap
+	case strings.Contains(n, "3080"):
+		return 12288 // 12GB variant; 10GB also exists but 12288 is safe cap
+	case strings.Contains(n, "3070 ti"):
+		return 8192
+	case strings.Contains(n, "3070"):
+		return 8192
+	case strings.Contains(n, "3060 ti"):
+		return 8192
+	case strings.Contains(n, "3060"):
+		return 12288
+	// RTX 20 series (Turing)
+	case strings.Contains(n, "2080 ti"):
+		return 11264
+	case strings.Contains(n, "2080 super"):
+		return 8192
+	case strings.Contains(n, "2080"):
+		return 8192
+	case strings.Contains(n, "2070 super"):
+		return 8192
+	case strings.Contains(n, "2070"):
+		return 8192
+	case strings.Contains(n, "2060 super"):
+		return 8192
+	case strings.Contains(n, "2060"):
+		return 6144
+	// GTX 16 series
+	case strings.Contains(n, "1660 ti"):
+		return 6144
+	case strings.Contains(n, "1660 super"):
+		return 6144
+	case strings.Contains(n, "1660"):
+		return 6144
+	case strings.Contains(n, "1650 super"):
+		return 4096
+	case strings.Contains(n, "1650"):
+		return 4096
+	// GTX 10 series
+	case strings.Contains(n, "1080 ti"):
+		return 11264
+	case strings.Contains(n, "1080"):
+		return 8192
+	case strings.Contains(n, "1070 ti"):
+		return 8192
+	case strings.Contains(n, "1070"):
+		return 8192
+	case strings.Contains(n, "1060"):
+		return 6144
+	// RTX PRO series (Blackwell professional)
+	case strings.Contains(n, "rtx pro 6000"):
+		return 96768
+	case strings.Contains(n, "rtx pro 5000"):
+		return 32768
+	case strings.Contains(n, "rtx pro 4500"):
+		return 24576
+	case strings.Contains(n, "rtx pro 4000"):
+		return 20480
+	case strings.Contains(n, "rtx pro 2000"):
+		return 16384
+	// Data center
+	case strings.Contains(n, "a100"):
+		return 81920
+	case strings.Contains(n, "h100"):
+		return 81920
+	case strings.Contains(n, "h200"):
+		return 143360
+	case strings.Contains(n, "p40"):
+		return 24576
+	case strings.Contains(n, "p100"):
+		return 16384
+	case strings.Contains(n, "v100"):
+		return 32768
+	default:
+		return 0 // unknown GPU, no cap
 	}
 }
